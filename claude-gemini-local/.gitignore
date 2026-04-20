@@ -1,0 +1,13 @@
+# Local Environment
+.env
+
+# Root Data Directory (Large models, logs, and generated private keys)
+data/
+
+# IDE files
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

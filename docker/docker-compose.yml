@@ -1,0 +1,64 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "${OLLAMA_PORT}:11434"
+    volumes:
+      - ${OLLAMA_CONFIG_PATH}:/root/.ollama/config
+      - ${OLLAMA_MODELS_PATH}:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      OLLAMA_MODELS: /root/.ollama
+      OLLAMA_HOST: "0.0.0.0"
+      OLLAMA_DEBUG: "1"
+      OLLAMA_FLASH_ATTENTION: "1"
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_NUM_PARALLEL: "2"
+      OLLAMA_NOPRUNE: "1"
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "echo 'Starting Ollama server...' && 
+       ollama serve & 
+       sleep 5 && 
+       echo 'Ensuring model ${OLLAMA_MODEL} is pulled...' && 
+       ollama pull ${OLLAMA_MODEL} && 
+       echo 'Forcing immediate load of ${OLLAMA_MODEL}...' && 
+       ollama run ${OLLAMA_MODEL} \"/bye\" &&
+       echo 'Model loaded in memory. Ready!' && 
+       wait"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q \"${OLLAMA_MODEL}\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm-proxy
+    ports:
+      - "${LITELLM_PORT}:4000"
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.base.yaml
+      - ${LITELLM_DATA_PATH}:/app/logs
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      LITELLM_OVERRIDE_MODELS: ${LITELLM_OVERRIDE_MODELS:-true}
+    entrypoint: /bin/sh -c
+    command: >
+      "cp /app/config.base.yaml /app/config.yaml &&
+       if [ \"$LITELLM_OVERRIDE_MODELS\" = \"true\" ]; then
+         sed -i \"s|model: ollama_chat/.*|model: ollama_chat/$OLLAMA_MODEL|g\" /app/config.yaml;
+       fi &&
+       exec litellm --config /app/config.yaml --port 4000"
+    depends_on:
+      - ollama
+    restart: unless-stopped
