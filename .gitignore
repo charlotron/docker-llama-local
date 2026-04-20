@@ -1,0 +1,14 @@
+# Datos de modelos y logs
+**/data/
+**/logs/
+
+# Entorno y secretos
+.env
+*.log
+
+# Docker
+.docker/
+
+# IDEs
+.idea/
+.vscode/
