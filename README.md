@@ -1,66 +1,59 @@
-# Gemini CLI with Local LLM (Ollama + LiteLLM)
+# Claude Code with Local LLM (llama.cpp + Docker + NVIDIA)
 
-Este proyecto permite conectar la **Gemini CLI** de Google con un modelo local ejecutándose en **Ollama**, utilizando **LiteLLM Proxy** como traductor de protocolos.
+Este proyecto permite conectar **Claude Code** (la CLI de Anthropic) con modelos locales ejecutándose en **llama.cpp** dentro de Docker, aprovechando la aceleración de **GPU NVIDIA**.
 
-Basado en el artículo: [Using Gemini CLI with a local LLM](https://dev.to/polar3130/using-gemini-cli-with-a-local-llm-5f5l)
+Basado en la guía de configuración: [Running Claude Code with Local LLMs](https://github.com/pchalasani/claude-code-tools/blob/main/docs/local-llm-setup.md#running-claude-code-and-codex-with-local-llms)
 
 ## 🏗️ Arquitectura del Proyecto
 
-- **`config/`**: Configuraciones de servicios (Persistidas en Git).
-  - `litellm/config.yaml`: Mapeo de modelos Gemini -> Ollama.
-- **`data/`**: Datos persistentes voluminosos o sensibles (Excluidos en Git).
-  - `ollama/models/`: Modelos descargados (GBs).
-  - `ollama/config/`: Claves SSH privadas generadas por Ollama.
-  - `litellm/logs/`: Registros del proxy.
-- **`.env`**: Variables de entorno para la infraestructura Docker.
+- **`llama-server`**: Servidor de inferencia de alto rendimiento con soporte nativo para la Anthropic Messages API.
+- **Docker + CUDA**: Ejecución aislada con acceso total a la GPU NVIDIA.
+- **Hugging Face Hub**: Descarga automática de modelos GGUF optimizados.
 
 ## 🚀 Getting Started
 
 ### 1. Requisitos Previos
 - Docker y Docker Compose instalados.
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) (Para soporte GPU).
-- Gemini CLI instalada en el sistema host.
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) configurado.
+- Claude Code instalado (`npm install -g @anthropic-ai/claude-code`).
 
-### 2. Configuración de Infraestructura
-Crea tu archivo de configuración local:
+### 2. Configuración Inicial
+Crea tu archivo `.env`:
 ```bash
 cp .env.sample .env
 ```
-*(Opcional: Edita el modelo en `OLLAMA_MODEL`. Por defecto usa `gemma2:9b`).*
+Edita `LLAMA_CPP_MODEL_HF` para elegir el modelo. Por defecto está configurado **Qwen2.5-Coder-14B**, que ofrece un gran equilibrio entre velocidad y capacidad de razonamiento.
 
-### 3. Levantar Servicios
+### 3. Lanzar Servidor
 ```bash
-docker compose up -d
+./launch-server.sh
 ```
-Ollama comenzará a descargar el modelo automáticamente. Puedes seguir el progreso con:
+El modelo se descargará automáticamente la primera vez. Puedes ver el progreso con:
 ```bash
-docker compose logs -f ollama
-```
-
-## 💻 Uso con Gemini CLI
-
-Para que la CLI se comunique con tu infraestructura local en lugar de los servidores de Google, sigue estos pasos en tu terminal:
-
-### 1. Configurar variables de entorno (Host)
-```bash
-# Redirigir a LiteLLM Proxy
-export GOOGLE_GEMINI_BASE_URL="http://localhost:4000"
-
-# API Key ficticia (requerida por el SDK)
-export GEMINI_API_KEY="sk-dummy-key"
+docker logs -f llama-cpp
 ```
 
-### 2. Ejecutar la CLI
-Es obligatorio desactivar el sandbox para que la CLI pueda acceder a la red local y heredar las variables de entorno:
+## 💻 Uso con Claude Code
+
+Para usar Claude con tu modelo local:
+
 ```bash
-gemini --sandbox=false
+./claude-llama.sh
 ```
 
-## 🛠️ Mantenimiento
+Este script configura automáticamente:
+- `ANTHROPIC_BASE_URL` apuntando a tu servidor local.
+- `ANTHROPIC_API_KEY` con un valor ficticio.
+- Desactiva el tráfico no esencial (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`).
 
-- **Cambiar de modelo:** Actualiza `OLLAMA_MODEL` en el `.env` y reinicia con `docker compose up -d`.
-- **Estado del servicio:** Usa `./status.sh` para ver qué modelo está en memoria y `./list-models.sh` para ver todos los descargados.
-- **Limpiar datos:** Borra la carpeta `./data` para resetear modelos y configuraciones locales.
-- **Logs del Proxy:** `docker compose logs -f litellm` para depurar peticiones de la CLI.
+## 🛠️ Herramientas y Tooling
 
-Para más detalles sobre las convenciones del proyecto, consulta [GEMINI.md](./GEMINI.md).
+El servidor está configurado con:
+- `--jinja`: Usa el template oficial del modelo para un formateo preciso de herramientas.
+- `--chat-template-kwargs '{"enable_thinking": false}'`: Optimiza el flujo para flujos de agentes.
+- `-c 65536`: Ventana de contexto amplia requerida por Claude Code.
+
+## 🔄 Mantenimiento
+
+- **Ver logs**: `docker logs -f llama-cpp`
+- **Limpiar todo**: `docker compose -f docker/docker-compose.yml down`

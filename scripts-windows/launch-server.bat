@@ -1,21 +1,22 @@
 @echo off
-setlocal enabledelayedexpansion
+SETLOCAL EnableDelayedExpansion
 
-:: Cargar variables del .env
+:: Cargar variables de .env
 if exist .env (
-    for /f "usebackq tokens=1* delims==" %%a in (`findstr /v "^#" .env`) do (
-        set %%a=%%b
+    for /f "tokens=*" %%a in ('type .env ^| findstr /v "^#"') do (
+        set "%%a"
     )
 )
 
-echo 🚀 Reiniciando infraestructura de IA Local (Ollama + LiteLLM)...
+echo 🚀 Reiniciando infraestructura de IA Local (llama.cpp)...
 docker compose --env-file .env -f docker/docker-compose.yml down
 docker compose --env-file .env -f docker/docker-compose.yml up -d --force-recreate
 
 echo ------------------------------------------------
-echo 📡 LiteLLM Proxy: http://localhost:%LITELLM_PORT%
-echo 🦙 Ollama API: http://localhost:%OLLAMA_PORT%
+echo 🦙 llama-server: http://localhost:%LLAMA_CPP_PORT%
+echo 📦 Modelo: %LLAMA_CPP_MODEL_HF%
 echo ------------------------------------------------
-echo ✅ Servidores relanzados en segundo plano.
-echo 💡 Usa ollama-list-downloaded-models.bat para ver el progreso de carga.
-endlocal
+echo ✅ Servidor relanzado en segundo plano.
+echo 💡 El modelo se descargara automaticamente si no existe en %LLAMA_CPP_MODELS_PATH%.
+echo 💡 Puedes ver los logs con: docker logs -f llama-cpp
+pause

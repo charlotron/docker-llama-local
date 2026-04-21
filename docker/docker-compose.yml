@@ -1,11 +1,11 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    network_mode: host
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama-cpp
+    ports:
+      - "${LLAMA_CPP_PORT:-8133}:8133"
     volumes:
-      - ${OLLAMA_CONFIG_PATH}:/root/.ollama/config
-      - ${OLLAMA_MODELS_PATH}:/root/.ollama
+      - ./data:/models
     deploy:
       resources:
         reservations:
@@ -14,47 +14,22 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      OLLAMA_MODELS: /root/.ollama
-      OLLAMA_HOST: "0.0.0.0"
-      OLLAMA_DEBUG: "1"
-      OLLAMA_FLASH_ATTENTION: "1"
-      OLLAMA_KEEP_ALIVE: "-1"
-      OLLAMA_NUM_PARALLEL: "4"
-      OLLAMA_NOPRUNE: "1"
-      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-32768}
-    entrypoint: ["/bin/sh", "-c"]
+      PORT: 8133
+      CTX: 32768
+      MODEL_FILE: ${LLAMA_CPP_HF_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}
+    # Añadimos múltiples alias para cubrir lo que pida la CLI
     command: >
-      "echo 'Starting Ollama server...' &&
-       ollama serve &
-       echo 'Waiting for Ollama server to be ready...' &&
-       while ! ollama list > /dev/null 2>&1; do sleep 1; done &&
-       echo 'Ollama server is ready!' &&
-       echo 'Ensuring model ${OLLAMA_MODEL} is pulled...' &&
-       ollama pull ${OLLAMA_MODEL} &&
-       echo 'Forcing immediate load of ${OLLAMA_MODEL}...' &&
-       ollama run ${OLLAMA_MODEL} '/bye' &&
-       echo 'Model ${OLLAMA_MODEL} loaded in memory. Ready!' &&
-       wait"
-    restart: unless-stopped
-
-  litellm:
-    image: ghcr.io/berriai/litellm:main-latest
-    container_name: litellm-proxy
-    network_mode: host
-    volumes:
-      - ./config/litellm/config.yaml:/app/config.base.yaml
-      - ${LITELLM_DATA_PATH}:/app/logs
-    environment:
-      OLLAMA_MODEL: ${OLLAMA_MODEL}
-      LITELLM_OVERRIDE_MODELS: ${LITELLM_OVERRIDE_MODELS:-true}
-      OPENAI_API_KEY: "sk-dummy-key"
-    entrypoint: /bin/sh -c
-    command: >
-      "cp /app/config.base.yaml /app/config.yaml &&
-       if [ \"$LITELLM_OVERRIDE_MODELS\" = \"true\" ]; then
-         sed -i \"s|model: openai/$OLLAMA_MODEL
-       fi &&
-       exec litellm --config /app/config.yaml --port 4000"
-    depends_on:
-      - ollama
+      -m /models/${LLAMA_CPP_HF_FILE} 
+      --alias claude-3-5-sonnet-20241022 
+      --alias claude-3-5-sonnet-latest 
+      --alias claude-3-sonnet-20240229 
+      --port 8133 
+      -ngl 999 
+      -c 32768 
+      --cache-type-k q4_0 
+      --cache-type-v q4_0 
+      --no-mmap 
+      --flash-attn on 
+      --jinja 
+      --host 0.0.0.0
     restart: unless-stopped
