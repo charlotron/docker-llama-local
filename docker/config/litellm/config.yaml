@@ -1,27 +1,7 @@
 litellm_settings:
   drop_params: true
-  set_it_headers: true
-  # Instrucción de sistema inyectada en cada mensaje
-  system_prompt_prefix: "Eres un asistente de programación experto. REGLAS CRÍTICAS: 1) Responde SIEMPRE en texto plano a saludos, confirmaciones (como 'vale', 'ok', 'entendido') y charla general. 2) NO uses herramientas (JSON) para responder a estos mensajes. 3) Usa tus propios conocimientos para escribir código (como Spring Boot) antes de usar WebSearch. 4) SOLO usa herramientas para acciones técnicas reales en el sistema de archivos o red."
-
 model_list:
   - model_name: claude-sonnet-4-6
     litellm_params:
-      model: openai/placeholder
-      api_base: "http://ollama:11434/v1"
-      api_key: "ollama"
-  - model_name: claude-3-5-sonnet-20240620
-    litellm_params:
-      model: openai/placeholder
-      api_base: "http://ollama:11434/v1"
-      api_key: "ollama"
-  - model_name: claude-3-5-sonnet-20241022
-    litellm_params:
-      model: openai/placeholder
-      api_base: "http://ollama:11434/v1"
-      api_key: "ollama"
-  - model_name: claude-3-7-sonnet-20250219
-    litellm_params:
-      model: openai/placeholder
-      api_base: "http://ollama:11434/v1"
-      api_key: "ollama"
+      model: ollama/qwen2.5-coder:14b
+      api_base: "http://ollama:11434"
