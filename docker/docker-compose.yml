@@ -1,11 +1,36 @@
 services:
   llama-cpp:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
     container_name: llama-cpp
     ports:
-      - "${LLAMA_CPP_PORT:-8133}:8133"
+      - "${LLAMA_CPP_PORT:-12345}:${LLAMA_CPP_PORT:-12345}"
     volumes:
-      - ./data:/models
+      - ./data/models:/models
+    # Usamos el alias específico configurado en el .env
+    command: >
+      --server
+      --model /models/${HF_FILE}
+      --alias ${LLAMA_MODEL_ALIAS:-claude_local}
+      --host 0.0.0.0 
+      --port ${LLAMA_CPP_PORT:-12345}
+      --n-gpu-layers ${LLAMA_CPP_N_GL:-all}
+      --ctx-size ${LLAMA_CPP_CTX_SIZE:-32768}
+      --batch-size 512 
+      --ubatch-size 256
+      --threads 20 
+      --threads-batch 20 
+      --fit on
+      --flash-attn on 
+      --cache-type-k q8_0 
+      --cache-type-v q8_0 
+      --no-mmap
+      --jinja
+      --reasoning on
+      --temp 0.75 
+      --top-p 0.95 
+      --top-k 40 
+      --min-p 0.05 
+      --repeat-penalty 1.00
     deploy:
       resources:
         reservations:
@@ -13,23 +38,4 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    environment:
-      PORT: 8133
-      CTX: 32768
-      MODEL_FILE: ${LLAMA_CPP_HF_FILE:-qwen2.5-coder-14b-instruct-q4_k_m.gguf}
-    # Añadimos múltiples alias para cubrir lo que pida la CLI
-    command: >
-      -m /models/${LLAMA_CPP_HF_FILE} 
-      --alias claude-3-5-sonnet-20241022 
-      --alias claude-3-5-sonnet-latest 
-      --alias claude-3-sonnet-20240229 
-      --port 8133 
-      -ngl 999 
-      -c 32768 
-      --cache-type-k q4_0 
-      --cache-type-v q4_0 
-      --no-mmap 
-      --flash-attn on 
-      --jinja 
-      --host 0.0.0.0
     restart: unless-stopped

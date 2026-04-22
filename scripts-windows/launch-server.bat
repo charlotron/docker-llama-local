@@ -1,22 +1,21 @@
 @echo off
-SETLOCAL EnableDelayedExpansion
+set LLAMA_PORT=12345
+set LLAMA_MODEL_FILE=Qwopus3.5-9B-v3.Q4_K_M.gguf
+set LLAMA_MODEL_ALIAS=Qwopus3.5-9B
 
-:: Cargar variables de .env
-if exist .env (
-    for /f "tokens=*" %%a in ('type .env ^| findstr /v "^#"') do (
-        set "%%a"
-    )
+set MODEL_DIR=docker\data\models
+set MODEL_PATH=%MODEL_DIR%\%LLAMA_MODEL_FILE%
+
+if not exist "%MODEL_DIR%" mkdir "%MODEL_DIR%"
+
+if not exist "%MODEL_PATH%" (
+    echo 📥 Descargando modelo...
+    powershell -Command "Invoke-WebRequest -Uri 'https://huggingface.co/jackrong/Qwopus3.5-9B-v3-GGUF/resolve/main/%LLAMA_MODEL_FILE%' -OutFile '%MODEL_PATH%'"
 )
 
-echo 🚀 Reiniciando infraestructura de IA Local (llama.cpp)...
-docker compose --env-file .env -f docker/docker-compose.yml down
-docker compose --env-file .env -f docker/docker-compose.yml up -d --force-recreate
+echo 🚀 Lanzando llama-server...
+docker compose -f docker/docker-compose.yml down
+docker compose -f docker/docker-compose.yml up -d
 
-echo ------------------------------------------------
-echo 🦙 llama-server: http://localhost:%LLAMA_CPP_PORT%
-echo 📦 Modelo: %LLAMA_CPP_MODEL_HF%
-echo ------------------------------------------------
-echo ✅ Servidor relanzado en segundo plano.
-echo 💡 El modelo se descargara automaticamente si no existe en %LLAMA_CPP_MODELS_PATH%.
-echo 💡 Puedes ver los logs con: docker logs -f llama-cpp
+echo ⏳ Esperando... verifica con: docker logs -f llama-cpp
 pause
