@@ -1,72 +1,84 @@
-# Claude Code with Local LLM (llama.cpp + Docker + NVIDIA)
+# Claude Code with Local LLM (llama.cpp + Docker)
 
-Este proyecto permite conectar **Claude Code** (la CLI de Anthropic) con modelos locales ejecutándose en **llama.cpp** dentro de Docker, aprovechando la aceleración de **GPU NVIDIA**.
+This project allows you to connect **Claude Code** (Anthropic's CLI agent) to local models running on **llama.cpp** inside Docker, with support for both **NVIDIA GPU** acceleration and **CPU-only** modes.
 
-## 🏗️ Arquitectura del Proyecto
+## 🏗️ Project Architecture
 
-- **`llama-server`**: Servidor de inferencia de alto rendimiento. Soporta nativamente las APIs de Anthropic Messages y OpenAI Chat Completions.
-- **Docker + CUDA**: Ejecución aislada con soporte para aceleración por GPU.
-- **Hugging Face Hub**: Descarga automática de modelos GGUF optimizados.
+- **`llama-server`**: High-performance inference server. It natively supports Anthropic Messages and OpenAI Chat Completions APIs.
+- **Docker + CUDA/CPU**: Isolated execution with support for GPU acceleration (NVIDIA) or standard CPU execution.
+- **Hugging Face Hub**: Automatic download of optimized GGUF models.
 
-## 🚀 Guía Rápida
+## 🚀 Quick Start
 
-### 1. Requisitos Previos
-- Linux con Docker y Docker Compose.
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) instalado y configurado.
-- Claude Code instalado (`npm install -g @anthropic-ai/claude-code`).
+### 1. Prerequisites
+- Linux with Docker and Docker Compose installed.
+- **For GPU mode**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed and configured.
+- Claude Code installed (`npm install -g @anthropic-ai/claude-code`).
 
-### 2. Configuración
-Crea tu archivo `.env` (ya preconfigurado para Qwopus3.5-9B y puerto 12345):
+### 2. Configuration
+Choose your mode and create your `.env` file:
+
+**For NVIDIA GPU (Recommended):**
 ```bash
-# Si no existe, puedes usar el script de lanzamiento que lo crea por ti o copiar el sample
-cp .env.sample .env
+cp .env.gpu.sample .env
+# Or for RTX 4070 Ti Super (16GB VRAM):
+# cp .env.gpu-4070tisuper.sample .env
 ```
 
-### 3. Lanzar Servidor
+**For CPU only:**
+```bash
+cp .env.cpu.sample .env
+```
+
+### 3. Launch Server
 ```bash
 ./launch-server.sh
 ```
-El script detectará si el modelo ya existe en `docker/data/models/`. Si no, lo descargará automáticamente antes de iniciar el contenedor.
+The script will detect if the model exists in `docker/data/models/`. If not, it will download it automatically before starting the container.
 
-### 4. Ejecutar Claude Code
+### 4. Run Claude Code
 ```bash
 ./claude-llama.sh
 ```
 
 ---
 
-## 🛠️ Especificaciones Técnicas (llama-server)
+## 🛠️ Technical Specifications (llama-server)
 
-Basado en la [documentación oficial de llama-server](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+Based on the [official llama-server documentation](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
 
-### Capacidades Principales
-- **Compatibilidad**: Soporte nativo para OpenAI (Chat/Completions) y Anthropic (Messages API).
-- **Rendimiento**: Continuous batching y decodificación paralela para múltiples usuarios.
-- **Tool Use**: Soporte para function calling (herramientas) requerido por agentes como Claude Code.
-- **Monitoreo**: Endpoint de métricas compatible con Prometheus.
+### Main Capabilities
+- **Compatibility**: Native support for Anthropic (Messages API) and OpenAI (Chat/Completions).
+- **Performance**: Continuous batching and parallel decoding.
+- **Tool Use**: Support for function calling required by agents like Claude Code.
 
-### Endpoints Disponibles (Puerto 12345)
-- `POST /v1/messages`: Endpoint compatible con Anthropic (usado por Claude Code).
-- `POST /v1/chat/completions`: Endpoint compatible con OpenAI.
-- `GET /health`: Estado del servidor y del modelo cargado.
-- `GET /metrics`: Métricas de rendimiento (Prometheus).
-- `POST /tokenize` / `/detokenize`: Gestión de tokens.
+### Available Endpoints (Port 12345 by default)
+- `POST /v1/messages`: Anthropic-compatible endpoint (used by Claude Code).
+- `POST /v1/chat/completions`: OpenAI-compatible endpoint.
+- `GET /health`: Server and model status.
 
-### Flags Clave en nuestra Configuración
-- `--n-gpu-layers all`: Descarga todas las capas del modelo en la VRAM de la GPU.
-- `--ctx-size 32768`: Ventana de contexto optimizada para 16GB de RAM.
-- `--flash-attn on`: Aceleración de atención para mejor rendimiento y menor uso de memoria.
-- `--jinja`: **Crítico**. Habilita el motor de plantillas para que el modelo gestione correctamente el "Tool Use" (uso de herramientas) de Claude Code.
-- `--reasoning on`: Habilita capacidades de razonamiento mejoradas.
+### Key Configuration Flags
+- `--n-gpu-layers`: Number of layers to offload to GPU (set to `all` or `999` for full GPU).
+- `--ctx-size`: Context window size (measured in **tokens**).
+- `--threads`: Number of CPU threads used for processing.
+- `--jinja`: **Critical**. Enables the template engine for correct "Tool Use" handling.
+- `--reasoning on`: Enables enhanced reasoning capabilities.
 
-## 📺 Referencias y Créditos
-Esta configuración está inspirada y optimizada siguiendo el tutorial de **Ing. Kevin David**: [Cómo configurar Claude Code con llama.cpp](https://www.youtube.com/watch?v=Ym967X2VCKY).
+## 📺 Credits
+This setup is inspired and optimized following the tutorial by **Ing. Kevin David**: [How to configure Claude Code with llama.cpp](https://www.youtube.com/watch?v=Ym967X2VCKY).
 
-- **Ver logs en tiempo real**: `docker logs -f llama-cpp`
-- **Detener servidor**: `docker compose -f docker/docker-compose.yml down`
-- **Limpieza profunda (borrar modelos y resetear)**:
+---
+
+## 🔧 Troubleshooting & Maintenance
+
+- **View real-time logs**:
+  - GPU: `docker logs -f llama-cpp-gpu`
+  - CPU: `docker logs -f llama-cpp`
+- **Stop server**: 
+  - The script `./launch-server.sh` handles this automatically, but you can also use:
+  - `docker compose -f docker/docker-compose-gpu.yml down`
+  - `docker compose -f docker/docker-compose-cpu.yml down`
+- **Deep Clean (Delete models and reset)**:
   ```bash
-  docker compose -f docker/docker-compose.yml down
   rm -rf docker/data/models/*
-  ./launch-server.sh
   ```
