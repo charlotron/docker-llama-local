@@ -1,26 +1,25 @@
-name: claude-llama
+name: claude-llama-gpu
 
 services:
   llama-cpp:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
-    container_name: llama-cpp
+    container_name: llama-cpp-gpu
     ports:
-      - "${LLAMA_CPP_PORT:-12345}:${LLAMA_CPP_PORT:-12345}"
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
     volumes:
       - ./data/models:/models
-    # Usamos el alias específico configurado en el .env
     command: >
       --server
       --model /models/${HF_FILE}
-      --alias ${LLAMA_MODEL_ALIAS:-claude_local}
+      --alias claude_local
       --host 0.0.0.0 
-      --port ${LLAMA_CPP_PORT:-12345}
-      --n-gpu-layers ${LLAMA_CPP_N_GL:-all}
-      --ctx-size ${LLAMA_CPP_CTX_SIZE:-32768}
+      --port ${LLAMA_PORT:-12345}
+      --n-gpu-layers ${LLAMA_GPU_LAYERS:-all}
+      --ctx-size ${LLAMA_CONTEXT_SIZE:-32768}
       --batch-size 512 
       --ubatch-size 256
-      --threads 20 
-      --threads-batch 20 
+      --threads ${LLAMA_CPU_THREADS:-16} 
+      --threads-batch ${LLAMA_CPU_THREADS:-16} 
       --fit on
       --flash-attn on 
       --cache-type-k q8_0 

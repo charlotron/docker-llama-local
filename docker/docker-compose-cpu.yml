@@ -1,0 +1,36 @@
+name: claude-llama
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full
+    container_name: llama-cpp
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+    volumes:
+      - ./data/models:/models
+    # Use the specific alias configured in .env
+    command: >
+      --server
+      --model /models/${HF_FILE}
+      --alias claude_local
+      --host 0.0.0.0 
+      --port ${LLAMA_PORT:-12345}
+      --n-gpu-layers 0
+      --ctx-size ${LLAMA_CONTEXT_SIZE:-32768}
+      --batch-size 512 
+      --ubatch-size 256
+      --threads ${LLAMA_CPU_THREADS:-16} 
+      --threads-batch ${LLAMA_CPU_THREADS:-16} 
+      --fit on
+      --flash-attn on 
+      --cache-type-k q8_0 
+      --cache-type-v q8_0 
+      --no-mmap
+      --jinja
+      --reasoning on
+      --temp 0.75 
+      --top-p 0.95 
+      --top-k 40 
+      --min-p 0.05 
+      --repeat-penalty 1.00
+    restart: unless-stopped
