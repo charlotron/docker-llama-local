@@ -1,3 +1,5 @@
+name: claude-llama
+
 services:
   llama-cpp:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
