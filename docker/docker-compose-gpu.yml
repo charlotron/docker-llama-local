@@ -16,6 +16,7 @@ services:
       --port ${LLAMA_PORT:-12345}
       --n-gpu-layers ${LLAMA_GPU_LAYERS:-all}
       --ctx-size ${LLAMA_CONTEXT_SIZE:-32768}
+      --context-shift
       --batch-size 512 
       --ubatch-size 256
       --threads ${LLAMA_CPU_THREADS:-16} 
