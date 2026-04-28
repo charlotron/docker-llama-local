@@ -13,6 +13,7 @@ if exist .env echo   - Configuration loaded
 :: Default values
 if not defined HF_REPO set "HF_REPO=Qwen/Qwen2.5-Coder-14B-Instruct-GGUF"
 if not defined HF_FILE set "HF_FILE=qwen2.5-coder-14b-instruct-q4_k_m.gguf"
+if not defined LLAMA_HOST set "LLAMA_HOST=127.0.0.1"
 if not defined LLAMA_PORT set "LLAMA_PORT=12345"
 if not defined COMPOSE_FILE set "COMPOSE_FILE=docker/docker-compose-gpu.yml"
 
@@ -21,6 +22,7 @@ echo.
 echo # --- MODEL CONFIGURATION ---
 echo   - Repository: %HF_REPO%
 echo   - File:       %HF_FILE%
+echo   - Host:       %LLAMA_HOST%
 echo   - Port:       %LLAMA_PORT%
 
 set "MODEL_DIR=docker\data\models"
@@ -57,6 +59,6 @@ echo   - Waiting for server...
 echo   (You can check logs with: docker logs -f llama-cpp-gpu)
 
 echo.
-echo   - Server active on port %LLAMA_PORT%
+echo   - Server active on http://%LLAMA_HOST%:%LLAMA_PORT%
 echo --------------------------------------------
 echo.

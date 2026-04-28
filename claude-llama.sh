@@ -22,10 +22,11 @@ if [ -f .env ]; then
 fi
 
 # Configuration
+HOST=${LLAMA_HOST:-127.0.0.1}
 PORT=${LLAMA_PORT:-12345}
 MODEL="claude_local"
 
-export ANTHROPIC_BASE_URL="http://127.0.0.1:$PORT"
+export ANTHROPIC_BASE_URL="http://$HOST:$PORT"
 export ANTHROPIC_API_KEY="sk-local"
 export ANTHROPIC_MODEL="$MODEL"
 export CLAUDE_CODE_ATTRIBUTION_HEADER=0

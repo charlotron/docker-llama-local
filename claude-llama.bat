@@ -9,10 +9,11 @@ echo --------------------------------------------
 if exist .env for /f "usebackq tokens=1* delims==" %%a in (`findstr /v /b "#" .env`) do set "%%a=%%b"
 
 :: Configuration
+if not defined LLAMA_HOST set "LLAMA_HOST=127.0.0.1"
 if not defined LLAMA_PORT set "LLAMA_PORT=12345"
 set "MODEL=claude_local"
 
-set "ANTHROPIC_BASE_URL=http://127.0.0.1:%LLAMA_PORT%"
+set "ANTHROPIC_BASE_URL=http://%LLAMA_HOST%:%LLAMA_PORT%"
 set "ANTHROPIC_API_KEY=sk-local"
 set "ANTHROPIC_MODEL=%MODEL%"
 set "CLAUDE_CODE_ATTRIBUTION_HEADER=0"

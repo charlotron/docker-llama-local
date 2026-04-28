@@ -75,5 +75,6 @@ print_step "Waiting for server"
 timeout 300s bash -c 'until docker logs llama-cpp-gpu 2>&1 | grep -q "server is listening on" || docker logs llama-cpp 2>&1 | grep -q "server is listening on"; do echo -n "."; sleep 2; done'
 echo ""
 
-print_success "Server active on port $LLAMA_PORT"
+print_success "Server active on http://$LLAMA_HOST:$LLAMA_PORT"
 echo -e "${CYAN}--------------------------------------------${NC}\n"
+
