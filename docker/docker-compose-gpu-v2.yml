@@ -1,0 +1,84 @@
+name: claude-llama-gpu
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    container_name: llama-cpp-gpu-v2
+    mem_limit: 24g
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+    volumes:
+      - ${MODELS_DIR:-/home/<user>/data/llama-models}:/models
+    command:
+      # --- Servidor ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+      - "--alias"
+      - "claude_local"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Plantilla de Chat y System Prompt Forzado ---
+      - "--jinja"
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": false, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- Distribución de Memoria GPU/RAM ---
+      - "--fit-target"
+      - "1536"
+
+      # --- Contexto y Atención ---
+      - "--ctx-size"
+      - "131072"
+      - "--predict"
+      - "32768"
+      - "--flash-attn"
+      - "on"
+      - "--context-shift"
+
+      # --- Concurrencia y Caché KV ---
+      - "--parallel"
+      - "1"
+      - "--cache-type-k"
+      - "q8_0"
+      - "--cache-type-v"
+      - "q8_0"
+
+      # --- Rendimiento y MTP ---
+      - "--no-mmap"
+      - "--mlock"
+      - "--no-warmup"
+      - "--draft-max"
+      - "2"
+
+      # --- Hilos CPU ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling (Para evitar bucles infinitos) ---
+      - "--temp"
+      - "0.6"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0.05"                      # Evita que escoja tokens residuales/repeticiones en chino
+      - "--presence-penalty"
+      - "0.2"                     # Penaliza la repetición de frases
+      - "--repeat-penalty"
+      - "1.1"                     # Rompe bucles de texto idéntico
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

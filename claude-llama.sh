@@ -15,14 +15,20 @@ print_header() {
 print_info() { echo -e "  ${CYAN}- $1:${NC} $2"; }
 
 # --- Configuration Loading ---
-if [ -f .env ]; then
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+elif [ -f .env ]; then
     set -a
     source .env
     set +a
 fi
 
 # Configuration
-HOST=${LLAMA_HOST:-127.0.0.1}
+HOST=${LLAMA_HOST:-gpu-host}
 PORT=${LLAMA_PORT:-12345}
 MODEL="claude_local"
 
@@ -38,4 +44,9 @@ echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 
 # Execution
-claude --model "$ANTHROPIC_MODEL" --dangerously-skip-permissions "$@"
+SCRIPT_NAME="$(basename "$0")"
+if [[ "$SCRIPT_NAME" == *"yolo"* ]]; then
+    claude --model "$ANTHROPIC_MODEL" --dangerously-skip-permissions "$@"
+else
+    claude --model "$ANTHROPIC_MODEL" "$@"
+fi
