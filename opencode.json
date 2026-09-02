@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "claude_local/claude_local",
+  "provider": {
+    "claude_local": {
+      "npm": "@ai-sdk/openai",
+      "name": "Llama.cpp Local Server",
+      "options": {
+        "baseURL": "http://{env:LLAMA_HOST}:{env:LLAMA_PORT}/v1",
+        "apiKey": "sk-local"
+      },
+      "models": {
+        "claude_local": {
+          "name": "Qwen 3.6 35B"
+        }
+      }
+    }
+  }
+}
