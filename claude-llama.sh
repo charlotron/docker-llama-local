@@ -28,7 +28,7 @@ elif [ -f .env ]; then
 fi
 
 # Configuration
-HOST=${LLAMA_HOST:-gpu-host}
+HOST=${LLAMA_HOST:-127.0.0.1}
 PORT=${LLAMA_PORT:-12345}
 MODEL="claude_local"
 

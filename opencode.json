@@ -3,7 +3,7 @@
   "model": "claude_local/claude_local",
   "provider": {
     "claude_local": {
-      "npm": "@ai-sdk/openai",
+      "npm": "@ai-sdk/anthropic",
       "name": "Llama.cpp Local Server",
       "options": {
         "baseURL": "http://{env:LLAMA_HOST}:{env:LLAMA_PORT}/v1",
