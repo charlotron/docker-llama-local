@@ -1,7 +1,7 @@
 # =================================================================
 # DOCKER COMPOSE CONFIGURATION - CPU COMPATIBLE MODE
 # =================================================================
-name: claude-llama
+name: docker-llama-cpu
 
 services:
   # The main llama.cpp inference service (running on CPU)

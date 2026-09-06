@@ -1,7 +1,7 @@
 # =================================================================
 # DOCKER COMPOSE CONFIGURATION - GPU (CUDA) ACCELERATED MODE
 # =================================================================
-name: claude-llama-gpu
+name: docker-llama-gpu
 
 services:
   # The main llama.cpp inference service
