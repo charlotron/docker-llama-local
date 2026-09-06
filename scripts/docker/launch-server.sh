@@ -15,13 +15,53 @@ print_success() { printf "  %b✓%b %s\n" "${GREEN}" "${NC}" "$1"; }
 print_error() { printf "  %b! ERROR:%b %s\n" "${RED}" "${NC}" "$1"; }
 print_info() { printf "  - %s: %s\n" "$1" "$2"; }
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+# --- Dependency checks ---
+# Fail here, naming what is missing and how to get it, rather than letting the
+# command fail later with "command not found" -- which says nothing about what
+# the script actually needed.
+require_cmd() {
+    if ! command -v "$1" &> /dev/null; then
+        printf "\n  %b! %s is not installed.%b %s\n\n" "${RED}" "$1" "${NC}" "$2" >&2
+        exit 1
+    fi
+}
+
+require_docker() {
+    require_cmd docker "Install Docker Desktop: https://docs.docker.com/get-docker/"
+    if ! docker info &> /dev/null; then
+        printf "\n  %b! Docker is installed but not running.%b Start it and try again.\n\n" "${RED}" "${NC}" >&2
+        exit 1
+    fi
+}
+
+require_docker
+require_cmd curl "Install it with your package manager."
+
+# Resolve symlinks before working out where this script lives, so it behaves the
+# same however it is reached: by relative path, by absolute path, or through a
+# symlink from a directory on PATH. dirname of a symlink gives the directory of
+# the link, not of the script, which would send every path below to the wrong
+# place.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    LINK_DIR="$( cd -P "$( dirname "$SOURCE" )" &> /dev/null && pwd )"
+    SOURCE="$( readlink "$SOURCE" )"
+    [[ "$SOURCE" != /* ]] && SOURCE="$LINK_DIR/$SOURCE"
+done
+SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" &> /dev/null && pwd )"
+INVOCATION_DIR="$PWD"
 cd "$SCRIPT_DIR/../.." || exit 1
 
 print_header "LOCAL INFRASTRUCTURE"
 
-# Allow custom environment file as first argument, default to .env
+# Allow custom environment file as first argument, default to .env. A relative
+# path is resolved against the directory the user ran the command from, not the
+# project root we just moved to -- otherwise `launch-server.sh my.env` would
+# quietly look for a different file than the one sitting next to the user.
 ENV_FILE="${1:-.env}"
+if [ -n "$1" ] && [[ "$ENV_FILE" != /* ]]; then
+    ENV_FILE="$INVOCATION_DIR/$ENV_FILE"
+fi
 
 if [ -f "$ENV_FILE" ]; then
     print_step "Loading configuration ($ENV_FILE)"
