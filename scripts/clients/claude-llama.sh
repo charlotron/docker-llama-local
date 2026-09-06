@@ -49,11 +49,10 @@ while [ -L "$SOURCE" ]; do
     [[ "$SOURCE" != /* ]] && SOURCE="$LINK_DIR/$SOURCE"
 done
 SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR/../.." || exit 1
 
-if [ -f .env ]; then
+if [ -f "$SCRIPT_DIR/../../.env" ]; then
     set -a
-    source .env
+    source "$SCRIPT_DIR/../../.env"
     set +a
 fi
 
