@@ -64,6 +64,7 @@ services:
       - "32768"
       # Enable Flash Attention to speed up inference and reduce VRAM usage
       - "--flash-attn"
+      - "on"
       # Enable context shifting to automatically slide context window on overflow
       - "--context-shift"
 
