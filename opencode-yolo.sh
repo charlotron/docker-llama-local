@@ -1,1 +1,0 @@
-opencode-llama.sh

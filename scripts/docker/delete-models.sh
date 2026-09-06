@@ -14,15 +14,15 @@ print_header() {
 
 # --- Cargar directorio desde .env o usar valor por defecto ---
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/../.." || exit 1
 
-MODELS_DIR="/home/<user>/data/llama-models"
+MODELS_DIR="./docker/data/models"
 
 if [ -f .env ]; then
     source .env
 fi
 
-MODELS_DIR="${MODELS_DIR:-/home/<user>/data/llama-models}"
+MODELS_DIR="${MODELS_DIR:-./docker/data/models}"
 
 print_header "CLEANUP LOCAL MODELS"
 echo -e "Directory: ${CYAN}${MODELS_DIR}${NC}\n"

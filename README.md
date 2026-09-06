@@ -21,8 +21,6 @@ Choose your mode and create your `.env` file:
 **For NVIDIA GPU (Recommended):**
 ```bash
 cp .env.gpu.sample .env
-# Or for RTX 4070 Ti Super (16GB VRAM):
-# cp .env.gpu-4070tisuper.sample .env
 ```
 
 **For CPU only:**
@@ -32,13 +30,13 @@ cp .env.cpu.sample .env
 
 ### 3. Launch Server
 ```bash
-./launch-server.sh
+./scripts/docker/launch-server.sh
 ```
 The script will detect if the model exists in `docker/data/models/`. If not, it will download it automatically before starting the container.
 
 ### 4. Run Claude Code
 ```bash
-./claude-llama.sh
+./scripts/clients/claude-llama.sh
 ```
 
 ---
@@ -75,7 +73,7 @@ This setup is inspired and optimized following the tutorial by **Ing. Kevin Davi
   - GPU: `docker logs -f llama-cpp-gpu`
   - CPU: `docker logs -f llama-cpp`
 - **Stop server**: 
-  - The script `./launch-server.sh` handles this automatically, but you can also use:
+  - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
   - `docker compose -f docker/docker-compose-gpu.yml down`
   - `docker compose -f docker/docker-compose-cpu.yml down`
 - **Deep Clean (Delete models and reset)**:

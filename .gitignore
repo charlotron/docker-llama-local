@@ -12,3 +12,6 @@
 # IDEs
 .idea/
 .vscode/
+
+# OpenCode dynamically generated configuration
+opencode.json

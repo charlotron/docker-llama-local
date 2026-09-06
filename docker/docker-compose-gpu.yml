@@ -1,43 +1,138 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) ACCELERATED MODE
+# =================================================================
 name: claude-llama-gpu
 
 services:
+  # The main llama.cpp inference service
   llama-cpp:
+    # Use the official high-performance CUDA-enabled llama.cpp docker image
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    
+    # Custom name for the running container
     container_name: llama-cpp-gpu
+    
+    # Restrict container memory usage to protect host system stability (recommended for large models)
+    mem_limit: 24g
+    
+    # Expose the configured llama-server port to the host machine
     ports:
       - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+      
+    # Mount the local or external model directory into the container's /models folder
     volumes:
-      - ./data/models:/models
-    command: >
-      --server
-      --model /models/${HF_FILE}
-      --alias claude_local
-      --host 0.0.0.0 
-      --port ${LLAMA_PORT:-12345}
-      --n-gpu-layers ${LLAMA_GPU_LAYERS:-all}
-      --ctx-size ${LLAMA_CONTEXT_SIZE:-32768}
-      --context-shift
-      --batch-size 512 
-      --ubatch-size 256
-      --threads ${LLAMA_CPU_THREADS:-16} 
-      --threads-batch ${LLAMA_CPU_THREADS:-16} 
-      --fit on
-      --flash-attn on 
-      --cache-type-k q8_0 
-      --cache-type-v q8_0 
-      --no-mmap
-      --jinja
-      --reasoning on
-      --temp 0.75 
-      --top-p 0.95 
-      --top-k 40 
-      --min-p 0.05 
-      --repeat-penalty 1.00
+      - ${MODELS_DIR:-./docker/data/models}:/models
+      
+    # Command-line flags passed directly to llama-server
+    command:
+      # --- Basic Server Setup ---
+      # Enable llama-server REST API mode (required for client agents)
+      - "--server"
+      # Specify the path of the target GGUF model file inside the container
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+      # Set the model alias (used as the model name in completions calls)
+      - "--alias"
+      - "llama-local"
+      # Bind to 0.0.0.0 to accept requests from other devices in your network
+      - "--host"
+      - "0.0.0.0"
+      # The internal port that llama-server will listen on
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      # Enable Jinja template rendering for modern, precise chat formatting
+      - "--jinja"
+      # Disables thinking blocks to save memory, and forces Spanish system prompt
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": false, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM & Memory Allocation ---
+      # Limit VRAM allocation (in MB) for model layers to prevent out-of-memory errors on the GPU
+      - "--fit-target"
+      - "1536"
+
+      # --- Context & Attention Options ---
+      # Total context window size across all parallel slots.
+      # This total size is divided by the number of parallel slots (--parallel) to determine
+      # the maximum context size available for each individual client (e.g., 393216 / 3 = 131072 or 128K per slot).
+      - "--ctx-size"
+      - "393216"
+      # Limit maximum tokens to generate per single response
+      - "--predict"
+      - "32768"
+      # Enable Flash Attention to speed up inference and reduce VRAM usage
+      - "--flash-attn"
+      # Enable context shifting to automatically slide context window on overflow
+      - "--context-shift"
+
+      # --- Concurrency & Cache Optimization ---
+      # Number of parallel slots/requests (clients) the server can handle simultaneously.
+      # Note: The total context size (--ctx-size) is divided among these active slots to get each slot's max context.
+      - "--parallel"
+      - "3"
+      # Quantize key-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-k"
+      - "q4_0"
+      # Quantize value-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-v"
+      - "q4_0"
+      # Set system memory cache limit (in MB) for processing requests
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      # Disable mmap memory mapping to ensure entire model fits in RAM/VRAM actively
+      - "--no-mmap"
+      - "--mlock"
+      # Disable warm-up phase to start serving requests instantly without initial delay
+      - "--no-warmup"
+      # Enable Multi-Token Prediction (MTP) draft decoding to accelerate inference
+      - "--draft-max"
+      - "2"
+
+      # --- CPU Thread Tuning ---
+      # Number of physical CPU threads for prompt processing
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      # Number of physical CPU threads for batch generation
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      # Controls creativity (lower values are more deterministic and focused)
+      - "--temp"
+      - "0.6"
+      # Cumulative probability cutoff for nucleus sampling
+      - "--top-p"
+      - "0.95"
+      # Limit vocabulary selection to top K tokens
+      - "--top-k"
+      - "20"
+      # Minimum token probability threshold (filters out low-probability repetitve tokens)
+      - "--min-p"
+      - "0.05"                      
+      # Penalizes repetition based on presence of tokens in the conversation
+      - "--presence-penalty"
+      - "0.2"                     
+      # Scale penalty for repeating identical word patterns (breaks infinite loops)
+      - "--repeat-penalty"
+      - "1.1"                     
+
+    # GPU Device Passthrough Configuration
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
+              # Enable CUDA graphics capabilities inside the container
               capabilities: [gpu]
+              
+    # Automatically restart the container unless manually stopped
     restart: unless-stopped

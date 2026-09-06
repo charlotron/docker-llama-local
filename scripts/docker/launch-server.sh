@@ -16,11 +16,12 @@ print_error() { printf "  %b! ERROR:%b %s\n" "${RED}" "${NC}" "$1"; }
 print_info() { printf "  - %s: %s\n" "$1" "$2"; }
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR" || exit 1
+cd "$SCRIPT_DIR/../.." || exit 1
 
-print_header "LOCAL INFRASTRUCTURE (V2)"
+print_header "LOCAL INFRASTRUCTURE"
 
-ENV_FILE=".env.v2"
+# Allow custom environment file as first argument, default to .env
+ENV_FILE="${1:-.env}"
 
 if [ -f "$ENV_FILE" ]; then
     print_step "Loading configuration ($ENV_FILE)"
@@ -33,19 +34,28 @@ else
     exit 1
 fi
 
+# Set defaults
 HF_REPO=${HF_REPO:-"unsloth/Qwen3.6-35B-A3B-GGUF"}
 HF_FILE=${HF_FILE:-"Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"}
 LLAMA_PORT=${LLAMA_PORT:-12345}
 LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
-COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu-v2.yml"}
-MODEL_DIR="${MODELS_DIR:-/home/<user>/data/llama-models}"
+COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu.yml"}
+
+# Determine container name and default models folder based on compose file
+if [[ "$COMPOSE_FILE" == *"cpu"* ]]; then
+    CONTAINER_NAME="llama-cpp"
+    MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
+else
+    CONTAINER_NAME="llama-cpp-gpu"
+    MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
+fi
 
 FILE_NAME=$(basename "$HF_FILE")
 MODEL_PATH="$MODEL_DIR/$FILE_NAME"
 
 export TARGET_MODEL_FILE="$FILE_NAME"
 
-print_header "MODEL CONFIGURATION (V2)"
+print_header "MODEL CONFIGURATION"
 print_info "Repository" "$HF_REPO"
 print_info "Remote Path" "$HF_FILE"
 print_info "Local File " "$MODEL_PATH"
@@ -55,48 +65,49 @@ mkdir -p "$MODEL_DIR"
 
 DOWNLOAD_URL="https://huggingface.co/$HF_REPO/resolve/main/$HF_FILE?download=true"
 
-# --- 1. Obtener tamaño exacto del archivo remoto en Hugging Face ---
-print_step "Consultando tamaño remoto del modelo en Hugging Face"
+# --- 1. Get remote file size from Hugging Face ---
+print_step "Consulting remote model size on Hugging Face"
 
+# Try getting size
 REMOTE_SIZE=$(curl -sIL --http1.1 "$DOWNLOAD_URL" | grep -i "^content-length:" | tail -n 1 | awk '{print $2}' | tr -d '\r')
 
 if [ -z "$REMOTE_SIZE" ] || ! [[ "$REMOTE_SIZE" =~ ^[0-9]+$ ]]; then
-    print_error "No se pudo obtener el tamaño del archivo remoto. Revisa la conexion o la URL."
+    print_error "Could not retrieve remote file size. Check connection or URL."
     exit 1
 fi
 
 REMOTE_SIZE_GB=$(awk "BEGIN {printf \"%.2f\", $REMOTE_SIZE/1073741824}")
-print_info "Tamaño remoto esperado" "${REMOTE_SIZE_GB} GB (${REMOTE_SIZE} bytes)"
+print_info "Expected Remote Size" "${REMOTE_SIZE_GB} GB (${REMOTE_SIZE} bytes)"
 
-# --- 2. Bucle de descarga y reanudacion estricta ---
+# --- 2. Strict download and resume loop ---
 MAX_ATTEMPTS=20
 ATTEMPT=1
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     LOCAL_SIZE=0
     if [ -f "$MODEL_PATH" ]; then
-        LOCAL_SIZE=$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
+        LOCAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
     fi
 
-    # Verificar si los bytes coinciden exactamente
+    # Check if bytes match exactly
     if [ "$LOCAL_SIZE" -eq "$REMOTE_SIZE" ]; then
-        # Verificar header GGUF por seguridad adicional
+        # Verify GGUF header
         HEADER=$(head -c 4 "$MODEL_PATH" 2>/dev/null)
         if [ "$HEADER" = "GGUF" ]; then
-            print_success "El archivo local esta completo y verificado (100% descargado y GGUF OK)"
+            print_success "Local file is complete and verified (100% downloaded & GGUF OK)"
             break
         else
-            print_error "El tamaño coincide pero la cabecera no es GGUF. Eliminando..."
+            print_error "Size matches but header is not GGUF. Removing..."
             rm -f "$MODEL_PATH"
         fi
     fi
 
     LOCAL_SIZE_GB=$(awk "BEGIN {printf \"%.2f\", $LOCAL_SIZE/1073741824}")
-    print_header "DESCARGA EN PROGRESO (Intento $ATTEMPT de $MAX_ATTEMPTS)"
-    printf "  %bProgreso local actual: %s GB / %s GB%b\n" "${YELLOW}" "$LOCAL_SIZE_GB" "$REMOTE_SIZE_GB" "${NC}"
-    printf "  %bReanudando descarga con HTTP/1.1 y resume activo...%b\n" "${CYAN}" "${NC}"
+    print_header "DOWNLOAD IN PROGRESS (Attempt $ATTEMPT of $MAX_ATTEMPTS)"
+    printf "  %bCurrent local progress: %s GB / %s GB%b\n" "${YELLOW}" "$LOCAL_SIZE_GB" "$REMOTE_SIZE_GB" "${NC}"
+    printf "  %bResuming download with HTTP/1.1 and resume active...%b\n" "${CYAN}" "${NC}"
 
-    # Usar --http1.1 para evitar fallos de streams HTTP/2 en descargas largas
+    # Use --http1.1 to prevent HTTP/2 stream failures during large downloads
     curl -L --http1.1 -C - \
         --retry 10 \
         --retry-delay 5 \
@@ -107,38 +118,39 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
 
     CURL_EXIT=$?
 
-    LOCAL_SIZE=$(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
+    LOCAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
     if [ "$LOCAL_SIZE" -eq "$REMOTE_SIZE" ]; then
-        print_success "Descarga completada al 100%"
+        print_success "Download completed 100%"
         break
     else
-        printf "\n%b! La descarga se corto antes de completar los %s GB. Reintentando automáticamente en 5s...%b\n" "${RED}" "$REMOTE_SIZE_GB" "${NC}"
+        printf "\n%b! Download cut off before completing the %s GB. Retrying automatically in 5s...%b\n" "${RED}" "$REMOTE_SIZE_GB" "${NC}"
         sleep 5
         ATTEMPT=$((ATTEMPT + 1))
     fi
 done
 
-if [ $(stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0) -ne "$REMOTE_SIZE" ]; then
-    print_error "No se logro completar la descarga tras $MAX_ATTEMPTS intentos."
+FINAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
+if [ "$FINAL_SIZE" -ne "$REMOTE_SIZE" ]; then
+    print_error "Failed to complete download after $MAX_ATTEMPTS attempts."
     exit 1
 fi
 
-# --- 3. Despliegue con Docker ---
-print_header "DOCKER DEPLOYMENT (V2)"
+# --- 3. Docker Deployment ---
+print_header "DOCKER DEPLOYMENT"
 print_step "Restarting services"
 
-docker stop llama-cpp-gpu llama-cpp-gpu-v2 > /dev/null 2>&1
+# Stop active containers first to avoid conflicts
+docker stop llama-cpp llama-cpp-gpu > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d
 
 print_step "Starting server and checking startup logs"
 printf "%b--------------------------------------------%b\n" "${CYAN}" "${NC}"
 
-CONTAINER_NAME="llama-cpp-gpu-v2"
 TIMEOUT=300
 ELAPSED=0
 
-READY_FILE="/tmp/llama_v2_ready_flag"
+READY_FILE="${TMPDIR:-/tmp}/llama_ready_flag"
 rm -f "$READY_FILE"
 
 docker logs -f "$CONTAINER_NAME" 2>&1 | while read -r line; do
@@ -159,8 +171,8 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
     fi
 
     if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-        printf "\n%b! ERROR: El contenedor se ha detenido inesperadamente.%b\n" "${RED}" "${NC}"
-        print_error "Revisa las ultimas lineas de error impresas arriba."
+        printf "\n%b! ERROR: Container stopped unexpectedly.%b\n" "${RED}" "${NC}"
+        print_error "Check the error logs printed above."
         kill $LOG_PID 2>/dev/null
         rm -f "$READY_FILE"
         exit 1
@@ -173,10 +185,10 @@ done
 if [ $ELAPSED -ge $TIMEOUT ]; then
     kill $LOG_PID 2>/dev/null
     rm -f "$READY_FILE"
-    print_error "Tiempo de espera agotado ($TIMEOUTs)."
+    print_error "Timeout reached ($TIMEOUTs)."
     exit 1
 fi
 
 printf "%b--------------------------------------------%b\n" "${CYAN}" "${NC}"
-print_success "Server V2 active on http://$LLAMA_HOST:$LLAMA_PORT"
+print_success "Server active on http://$LLAMA_HOST:$LLAMA_PORT"
 printf "%b--------------------------------------------%b\n\n" "${CYAN}" "${NC}"

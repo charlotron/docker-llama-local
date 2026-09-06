@@ -16,12 +16,9 @@ print_info() { echo -e "  ${CYAN}- $1:${NC} $2"; }
 
 # --- Configuration Loading ---
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR/../.." || exit 1
 
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
-elif [ -f .env ]; then
+if [ -f .env ]; then
     set -a
     source .env
     set +a
@@ -30,15 +27,18 @@ fi
 # Configuration
 export LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
 export LLAMA_PORT=${LLAMA_PORT:-12345}
-export MODEL="claude_local/claude_local"
+export MODEL="llama-local/llama-local"
 
-# Generate the opencode.json dynamically with resolved variables to avoid invalid URL errors
-cat <<EOF > "$SCRIPT_DIR/opencode.json"
+# Define the temporary path for opencode.json dynamically using system temporary path
+export OPENCODE_CONFIG="${TMPDIR:-/tmp}/opencode.json"
+
+# Generate the opencode.json dynamically inside the system temporary folder to keep the workspace spotless
+cat <<EOF > "$OPENCODE_CONFIG"
 {
   "\$schema": "https://opencode.ai/config.json",
-  "model": "claude_local/claude_local",
+  "model": "llama-local/llama-local",
   "provider": {
-    "claude_local": {
+    "llama-local": {
       "npm": "@ai-sdk/anthropic",
       "name": "Llama.cpp Local Server",
       "options": {
@@ -46,8 +46,8 @@ cat <<EOF > "$SCRIPT_DIR/opencode.json"
         "apiKey": "sk-local"
       },
       "models": {
-        "claude_local": {
-          "name": "Qwen 3.6 35B"
+        "llama-local": {
+          "name": "${HF_FILE:-llama-local}"
         }
       }
     }
@@ -55,9 +55,13 @@ cat <<EOF > "$SCRIPT_DIR/opencode.json"
 }
 EOF
 
-print_header "OPENCODE LOCAL (QWEN 3.6)"
+# Ensure the temporary opencode.json is cleaned up automatically on exit from the temporary directory
+trap 'rm -f "$OPENCODE_CONFIG"' EXIT SIGINT SIGTERM
+
+print_header "OPENCODE LOCAL CLIENT"
 print_info "Host " "http://$LLAMA_HOST:$LLAMA_PORT"
-print_info "Model" "$MODEL"
+print_info "Alias" "$MODEL"
+print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 

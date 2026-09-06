@@ -16,12 +16,9 @@ print_info() { echo -e "  ${CYAN}- $1:${NC} $2"; }
 
 # --- Configuration Loading ---
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR/../.." || exit 1
 
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
-elif [ -f .env ]; then
+if [ -f .env ]; then
     set -a
     source .env
     set +a
@@ -30,7 +27,7 @@ fi
 # Configuration
 HOST=${LLAMA_HOST:-127.0.0.1}
 PORT=${LLAMA_PORT:-12345}
-MODEL="claude_local"
+MODEL="llama-local"
 
 export ANTHROPIC_BASE_URL="http://$HOST:$PORT"
 export ANTHROPIC_API_KEY="sk-local"
@@ -39,7 +36,8 @@ export CLAUDE_CODE_ATTRIBUTION_HEADER=0
 
 print_header "CLAUDE CODE LOCAL"
 print_info "Host " "$ANTHROPIC_BASE_URL"
-print_info "Model" "$ANTHROPIC_MODEL"
+print_info "Alias" "$ANTHROPIC_MODEL"
+print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 

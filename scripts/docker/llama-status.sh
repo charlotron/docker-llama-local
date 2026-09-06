@@ -10,12 +10,9 @@ NC='\033[0m' # No Color
 
 # --- Configuration Loading ---
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR/../.." || exit 1
 
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    set -a
-    source "$SCRIPT_DIR/.env"
-    set +a
-elif [ -f .env ]; then
+if [ -f .env ]; then
     set -a
     source .env
     set +a

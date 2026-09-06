@@ -17,27 +17,27 @@ print_success() { echo -e "  ✓ $1"; }
 print_info() { echo -e "  - $1"; }
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/../.." || exit 1
 
 print_header "STOPPING ALL LLAMA.CPP SERVERS"
 
 print_step "Stopping active Docker containers"
 
-# Detener los contenedores v1 y v2 si están en ejecución
-docker stop llama-cpp-gpu llama-cpp-gpu-v2 > /dev/null 2>&1
+# Stop active containers if running
+docker stop llama-cpp-gpu llama-cpp > /dev/null 2>&1
 
-# Apagar mediante docker compose usando ambos entornos si están disponibles
+# Shut down with docker compose using active configurations
 if [ -f .env ] && [ -f docker/docker-compose-gpu.yml ]; then
     docker compose --env-file .env -f docker/docker-compose-gpu.yml down > /dev/null 2>&1
 fi
 
-if [ -f .env.v2 ] && [ -f docker/docker-compose-gpu-v2.yml ]; then
-    docker compose --env-file .env.v2 -f docker/docker-compose-gpu-v2.yml down > /dev/null 2>&1
+if [ -f docker/docker-compose-cpu.yml ]; then
+    docker compose -f docker/docker-compose-cpu.yml down > /dev/null 2>&1
 fi
 
 print_success "All server instances stopped"
 
-# Verificación de recursos liberados
+# Resource status check
 print_header "RESOURCING STATUS"
 
 if command -v nvidia-smi &> /dev/null; then
@@ -45,7 +45,9 @@ if command -v nvidia-smi &> /dev/null; then
     print_info "VRAM currently used: ${VRAM_USAGE} MiB"
 fi
 
-RAM_FREE=$(free -h | awk '/^Mem:/ {print $4}')
-print_info "Free System RAM: ${RAM_FREE}"
+if command -v free &> /dev/null; then
+    RAM_FREE=$(free -h | awk '/^Mem:/ {print $4}')
+    print_info "Free System RAM: ${RAM_FREE}"
+fi
 
 echo -e "\n${CYAN}--------------------------------------------${NC}\n"
