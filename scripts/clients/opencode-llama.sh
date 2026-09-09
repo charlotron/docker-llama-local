@@ -87,64 +87,83 @@ fi
 # Define the temporary path for opencode.json dynamically using system temporary path
 export OPENCODE_CONFIG="${TMPDIR:-/tmp}/opencode.json"
 
-# Generate the opencode.json dynamically inside the system temporary folder to keep the workspace spotless
-cat <<EOF > "$OPENCODE_CONFIG"
-{
-  // JSON Schema validation for OpenCode configuration parameters
-  "\$schema": "https://opencode.ai/config.json",
+# Merge the global opencode.json with dynamic settings to avoid losing MCPs and plugins
+printf "  ${CYAN}- Merging system opencode.json with local server configuration...${NC}\n"
+node -e "
+const fs = require('fs');
+const path = require('path');
 
-  // The active/default model alias to use for completions and TUI sessions
-  "model": "llama-local/llama-local",
+const globalConfigPath = path.join(process.env.HOME, '.config', 'opencode', 'opencode.json');
+let baseConfig = {};
 
-  // Enable native auto-compaction to automatically compress conversation history before slot overflow
-  "autoCompact": true,
+if (fs.existsSync(globalConfigPath)) {
+  try {
+    const raw = fs.readFileSync(globalConfigPath, 'utf8').trim();
+    if (raw) {
+      baseConfig = JSON.parse(raw);
+    }
+  } catch (e) {
+    console.error('Warning: Failed to parse global opencode.json:', e.message);
+  }
+}
 
-  // Specific compaction rules and buffers
-  "compaction": {
-    "auto": true,             // Enable unassisted background compaction
-    "keep": {
-      "tokens": ${LLAMA_COMPACT_KEEP}         // Keep the last ${LLAMA_COMPACT_KEEP} tokens (recent chat history) completely untouched
-    },
-    "buffer": ${LLAMA_COMPACT_BUFFER}           // Trigger compaction ${LLAMA_COMPACT_BUFFER} tokens before the physical slot context limit (must be > output limit)
+const dynamicConfig = {
+  'model': 'llama-local/llama-local',
+  'autoCompact': true,
+  'compaction': {
+    'auto': true,
+    'keep': { 'tokens': Number(process.env.LLAMA_COMPACT_KEEP) },
+    'buffer': Number(process.env.LLAMA_COMPACT_BUFFER)
   },
-
-  // Limit concurrency to exactly 1 subagent at a time
-  // This perfectly orchestrates: 1 Coordinator (Slot 0) + 1 Active Worker Subagent (Slot 1)
-  "performance": {
-    "maxConcurrentAgents": 1
-  },
-  "agents": {
-    "maxConcurrent": 1
-  },
-
-  // Array of active/enabled plugins for this session
-  "plugin": [
-    "opencode-comeon"
-  ],
-
-  // Providers configuration mapping
-  "provider": {
-    "llama-local": {
-      "npm": "@ai-sdk/anthropic",
-      "name": "Llama.cpp Local Server",
-      "options": {
-        "baseURL": "http://{env:LLAMA_HOST}:{env:LLAMA_PORT}/v1",
-        "apiKey": "sk-local"
+  'performance': { 'maxConcurrentAgents': 1 },
+  'agents': { 'maxConcurrent': 1 },
+  'provider': {
+    'llama-local': {
+      'npm': '@ai-sdk/anthropic',
+      'name': 'Llama.cpp Local Server',
+      'options': {
+        'baseURL': 'http://' + process.env.LLAMA_HOST + ':' + process.env.LLAMA_PORT + '/v1',
+        'apiKey': 'sk-local'
       },
-      "models": {
-        "llama-local": {
-          "name": "${HF_FILE:-llama-local}",
-          "limit": {
-            // Context limits dynamically synchronized from the Llama.cpp active slot size
-            "context": ${LLAMA_CONTEXT_SIZE},
-            "output": ${LLAMA_OUTPUT_LIMIT}
+      'models': {
+        'llama-local': {
+          'name': process.env.HF_FILE || 'llama-local',
+          'limit': {
+            'context': Number(process.env.LLAMA_CONTEXT_SIZE),
+            'output': Number(process.env.LLAMA_OUTPUT_LIMIT)
           }
         }
       }
     }
   }
+};
+
+function deepMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (source[key] instanceof Object && target[key] instanceof Object) {
+      if (Array.isArray(source[key]) && Array.isArray(target[key])) {
+        target[key] = Array.from(new Set([...target[key], ...source[key]]));
+      } else if (!Array.isArray(source[key]) && !Array.isArray(target[key])) {
+        deepMerge(target[key], source[key]);
+      } else {
+        target[key] = source[key];
+      }
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
 }
-EOF
+
+const mergedConfig = deepMerge(baseConfig, dynamicConfig);
+
+if (!mergedConfig['\$schema']) {
+  mergedConfig['\$schema'] = 'https://opencode.ai/config.json';
+}
+
+fs.writeFileSync(process.env.OPENCODE_CONFIG, JSON.stringify(mergedConfig, null, 2), 'utf8');
+"
+
 # Ensure the temporary opencode.json is cleaned up automatically on exit from the temporary directory
 trap 'rm -f "$OPENCODE_CONFIG"' EXIT SIGINT SIGTERM
 
