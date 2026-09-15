@@ -74,7 +74,7 @@ This setup is inspired and optimized following the tutorial by **Ing. Kevin Davi
   - CPU: `docker logs -f llama-cpp`
 - **Stop server**: 
   - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
-  - `docker compose -f docker/docker-compose-gpu.yml down`
+  - `docker compose -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml down`
   - `docker compose -f docker/docker-compose-cpu.yml down`
 - **Deep Clean (Delete models and reset)**:
   ```bash

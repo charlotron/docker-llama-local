@@ -79,7 +79,7 @@ HF_REPO=${HF_REPO:-"unsloth/Qwen3.6-35B-A3B-GGUF"}
 HF_FILE=${HF_FILE:-"Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"}
 LLAMA_PORT=${LLAMA_PORT:-12345}
 LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
-COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu.yml"}
+COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml"}
 
 # Determine container name and default models folder based on compose file
 if [[ "$COMPOSE_FILE" == *"cpu"* ]]; then
@@ -180,7 +180,7 @@ print_header "DOCKER DEPLOYMENT"
 print_step "Restarting services"
 
 # Stop active containers first to avoid conflicts
-docker stop llama-cpp llama-cpp-gpu > /dev/null 2>&1
+docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d
 

@@ -56,11 +56,15 @@ print_header "STOPPING ALL LLAMA.CPP SERVERS"
 print_step "Stopping active Docker containers"
 
 # Stop active containers if running
-docker stop llama-cpp-gpu llama-cpp > /dev/null 2>&1
+docker stop llama-cpp-gpu llama-cpp-gpu-qwen-27b llama-cpp > /dev/null 2>&1
 
 # Shut down with docker compose using active configurations
-if [ -f .env ] && [ -f docker/docker-compose-gpu.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu.yml down > /dev/null 2>&1
+if [ -f .env ] && [ -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml ]; then
+    docker compose --env-file .env -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml down > /dev/null 2>&1
+fi
+
+if [ -f .env ] && [ -f docker/docker-compose-gpu-qwen-27b.yml ]; then
+    docker compose --env-file .env -f docker/docker-compose-gpu-qwen-27b.yml down > /dev/null 2>&1
 fi
 
 if [ -f docker/docker-compose-cpu.yml ]; then

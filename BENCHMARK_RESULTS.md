@@ -66,7 +66,7 @@ clients, not just sequential benchmarks), try `--parallel 1`.
 (131072/slot) as in the current setup. This is the only config with solid, repeated evidence,
 verified quality, and it matches the quantizer's own official recommendation.
 
-Compose flag changes needed in `docker-compose-gpu.yml`:
+Compose flag changes needed in `docker-compose-gpu-qwen-35b-a3b-mtp.yml`:
 - `--draft-max 2` → `--spec-type draft-mtp` + `--spec-draft-n-max 2`
 - `--no-mmap --mlock` → `--load-mode mlock`
 - Document that this requires updating the base image (`docker pull ghcr.io/ggml-org/llama.cpp:full-cuda`) before deploying.
@@ -89,5 +89,5 @@ priority, but remains a next step if more speed is wanted at some size/quality c
 - Disk: 838GB free; kept `Qwen3.6-35B-A3B-UD-Q4_K_XL.baseline.gguf` (original, no MTP),
   `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (with MTP tensors), `Qwen3.8-27B-UD-Q5_K_M.gguf`
   (pre-existing).
-- `docker/docker-compose-gpu.yml` on gpu-host modified locally with the new flags — not
+- `docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml` on gpu-host modified locally with the new flags — not
   committed to git.
