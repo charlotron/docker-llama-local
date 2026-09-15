@@ -1,0 +1,109 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA), QWEN 27B DENSE MODE
+# =================================================================
+# Alternate profile to docker-compose-gpu.yml: a dense (non-MoE) 27B model
+# instead of the 35B A3B MoE. Benchmarked on gpu-host (RTX 4070 SUPER 12GB /
+# 23GB RAM) at 30.2 tok/s generation, stable across repeated runs -- see
+# BENCHMARK_RESULTS.md, row 6.
+#
+# MTP was NOT enabled here on purpose. It measured faster in isolation
+# (+92% best case) but pushed host RAM to 94% and into swap at --parallel 3,
+# collapsing throughput below the non-MTP baseline (BENCHMARK_RESULTS.md,
+# rows 7-9). Until that memory behavior is diagnosed on a host with this
+# little RAM, --parallel 3 without MTP is the reliable, reproducible choice.
+# If you have more system RAM (32GB+) it's worth retrying --spec-type
+# draft-mtp --spec-draft-n-max 2 here the same way it's set up in
+# docker-compose-gpu.yml.
+
+name: docker-llama-gpu
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+
+    container_name: llama-cpp-gpu-qwen-27b
+
+    # Restrict container memory usage to protect host system stability
+    mem_limit: 24g
+
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+
+    command:
+      # --- Basic Server Setup ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.8-27B-UD-Q5_K_M.gguf}"
+      - "--alias"
+      - "llama-local"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      - "--jinja"
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": false, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM & Memory Allocation ---
+      - "--fit-target"
+      - "1536"
+
+      # --- Context & Attention Options ---
+      # Same 393216 / 3 = 131072 (128K) per-slot split as the 35B A3B profile.
+      - "--ctx-size"
+      - "393216"
+      - "--predict"
+      - "32768"
+      - "--flash-attn"
+      - "on"
+      - "--context-shift"
+
+      # --- Concurrency & Cache Optimization ---
+      - "--parallel"
+      - "3"
+      - "--cache-type-k"
+      - "q4_0"
+      - "--cache-type-v"
+      - "q4_0"
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      - "--load-mode"
+      - "mlock"
+      - "--no-warmup"
+
+      # --- CPU Thread Tuning ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      - "--temp"
+      - "0.6"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0.05"
+      - "--presence-penalty"
+      - "0.2"
+      - "--repeat-penalty"
+      - "1.1"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped
