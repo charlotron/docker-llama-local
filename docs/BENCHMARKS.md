@@ -1,24 +1,41 @@
 # Model benchmarks and chosen configurations
 
-This document summarizes the benchmarking work behind the three GPU profiles shipped in
-`docker/`, and points to the full raw evidence in [`BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md)
-at the repo root (eight rounds, 27+ speed configurations, a code-quality shootout).
+> **CURATED SUMMARY.** This is the condensed, human-readable version: final profiles, chosen
+> configs, what was rejected and why. For the full raw data behind every number here — every
+> round, every test, every methodology mistake found and corrected, in chronological order —
+> see [`BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md).
+
+This document summarizes the benchmarking work behind the four GPU profiles shipped in
+`docker/`, and points to the full raw evidence in [`BENCHMARK_RESULTS.md`](./BENCHMARK_RESULTS.md)
+(ten rounds, 27+ speed configurations, a code-quality shootout, and a 9B sanity check).
 
 Host used for all measurements: **gpu-host**, RTX 4070 SUPER (12GB VRAM), WSL2 with a
 23GB RAM ceiling (set in `.wslconfig`, not the physical host's real capacity — see
 `BENCHMARK_RESULTS.md` "WSL memory ceiling" for how to raise it).
 
-## The three profiles
+## The four profiles
+
+All four were re-verified end-to-end on gpu-host (Round 10): fresh boot, `/health` check, one
+real completion request each. Config shown reflects final values in place at that check
+(`--parallel 2`; Qwen profiles run `preserve_thinking:true`, temp 0.6/top_p 0.95/top_k 20/
+min_p 0/presence_penalty 0/repeat_penalty 1.0, `--predict 81920`, 196608 ctx-per-slot;
+gpt-oss-20b runs temp 1.0/top_p 1.0/top_k 0, `reasoning_effort: high`, 131072 ctx-per-slot).
 
 | Profile | Compose file | Model | Type | Quant | MTP | Speed (gen) | VRAM used | Host RAM used |
 |---|---|---|---|---|---|---|---|---|
 | **Default — fastest, most reliable** | `docker-compose-gpu-qwen-35b-a3b-mtp.yml` | Qwen 35B A3B | MoE, ~3B active/token | Q4_K_XL | **on** (`draft-mtp`, n-max 2) | **42.0 ± 3.6 tok/s** (n=8) | 9.67/12.28GB | 18.8/23.5GB |
-| **Dense alternative** | `docker-compose-gpu-qwen-27b.yml` | Qwen 27B | dense, 27B active/token | IQ4_XS | **on** (`draft-mtp`, n-max 2) | 5.4 ± 0.5 tok/s (n=5) | 8.65/12.28GB | 18/23GB |
+| **Dense alternative** | `docker-compose-gpu-qwen-27b-mtp.yml` | Qwen 27B | dense, 27B active/token | IQ4_XS | **on** (`draft-mtp`, n-max 2) | 5.4 ± 0.5 tok/s (n=5) | 8.65/12.28GB | 18/23GB |
+| **Dense, uncensored community fine-tune** | `docker-compose-gpu-qwen-27b-uncensored.yml` | Qwen 27B (HauhauCS-Aggressive fine-tune) | dense, 27B active/token | IQ2_M | **off** (real MTP tensors present but measured slower — 3.45 vs 4.40 tok/s, see Round 7) | 4.40 ± 0.02 tok/s (n=5) | 9.72/12.28GB | swap-free |
 | **Fast MoE alternative, smaller footprint** | `docker-compose-gpu-gpt-oss-20b.yml` | gpt-oss-20b | MoE, ~3.6B active/token | Q4_K_XL | n/a (no MTP tensors in this arch) | 42.19 ± 6.00 tok/s (n=5) | 10.44/12.28GB | 6.4/23GB |
 
 **Recommendation**: use the default (35B A3B+MTP) unless you have a specific reason not
 to. It's the only config that came out flawless on every test run, including the hardest
 code-quality task tried (a thread-safe LRU cache with TTL — see "Code quality" below).
+
+**A 9B dense model (`Qwopus3.5-9B-v3.Q4_K_M.gguf`, `Jackrong/Qwopus3.5-9B-v3-GGUF`) was
+evaluated as a possible 5th profile and rejected** — see "Models/configs tried and rejected"
+below and `BENCHMARK_RESULTS.md` Round 9 for the full writeup. Fast (44-48 tok/s) but its
+generated code doesn't run even after fixing the obvious bugs.
 
 ## Why these three, and not others
 
@@ -52,6 +69,7 @@ is traceable too.
 | Devstral-Small-2507 | dense, 24B | Q4_K_XL | n/a | 4.34 tok/s | Too slow (dense forward-pass cost); also found to have a **real functional bug** — TTL is entirely unimplemented in generated code despite being an explicit requirement |
 | GLM-4.5-Air | MoE, 106B total | IQ4_XS | n/a | not tested | Doesn't fit — first shard alone is ~50GB, total >60GB |
 | MiniMax-M2 | MoE, 230B-class | — | n/a | not tested | No realistically small quant found; doesn't fit this hardware |
+| Qwopus3.5-9B-v3 (`Jackrong/Qwopus3.5-9B-v3-GGUF`) | dense, 9B active | Q4_K_M | n/a — **no MTP/nextn tensors in this GGUF**, clean `context type MTP requested but model doesn't contain MTP layers` error | 44-48 tok/s (fastest on record — fits almost entirely in VRAM) | Fast, but **generated code is broken**: crashes immediately (`class LRUCacheWithTTL(threading.Lock)` — subclassing a C type), and after patching that out, `get()` calls an undefined method (`self._move_to_end`) and fails on its first real call. Also needs a much larger reasoning budget than any other profile (16000 tokens) just to produce a visible answer at all. See `BENCHMARK_RESULTS.md` Round 9. |
 
 ## Code quality: not just speed
 
@@ -69,6 +87,26 @@ independent edge-case tests instead of eyeballing it.
 | Qwen 27B+MTP | Not completed — burned its entire token budget on internal reasoning without producing an answer, consistent with it already being ruled out on speed. |
 
 Full transcripts and line-level bug descriptions are in `BENCHMARK_RESULTS.md`, "Round 5".
+
+## Final capability check: reasoning, math, programming, vision (all 4 shipped profiles)
+
+Closing round of this investigation. All four shipped profiles were given the same fixed set
+of three tasks — a reasoning word problem, a multi-step arithmetic expression, and a `two_sum`
+programming task (code actually executed, not just read) — plus a vision-support check via
+`/props`.
+
+| Model | Reasoning | Math | Programming | Vision |
+|---|---|---|---|---|
+| 35B A3B+MTP | Pass | Pass | Pass (executed, all assertions) | No (`vision: false`, no mmproj) |
+| 27B dense+MTP | Pass | Pass | Pass (executed, all assertions) | No |
+| 27B "uncensored" (HauhauCS) | Pass | Pass | Pass (executed, all assertions) | No |
+| gpt-oss-20b | Pass | Pass | Pass (executed, all assertions) | No |
+
+All four pass cleanly, no fixes needed — see `BENCHMARK_RESULTS.md` "Round 11" for the exact
+prompts, verification methodology, and per-model token-usage notes. This confirms no basic
+capability regression across the final profile set; it does not override the harder
+differentiation from the LRU-cache-with-TTL task above (Round 5), where the 35B A3B remains
+the only model that passed with zero fixes.
 
 ## Open questions / not yet decided
 
@@ -97,11 +135,21 @@ Full transcripts and line-level bug descriptions are in `BENCHMARK_RESULTS.md`, 
 ## How to switch profiles
 
 ```bash
-./scripts/docker/launch-server.sh                       # default: 35B A3B + MTP
-./scripts/docker/launch-server.sh .env.gpu.qwen-27b      # dense 27B + MTP
-./scripts/docker/launch-server.sh .env.gpu.gpt-oss-20b   # gpt-oss-20b
+./scripts/docker/launch-server.sh                              # default: 35B A3B + MTP
+./scripts/docker/launch-server.sh .env.gpu.qwen-27b-mtp         # dense 27B + MTP
+./scripts/docker/launch-server.sh .env.gpu.qwen-27b-uncensored  # dense 27B, HauhauCS fine-tune, no MTP
+./scripts/docker/launch-server.sh .env.gpu.gpt-oss-20b          # gpt-oss-20b
 ```
 
 Each `.env.*.sample` points `COMPOSE_FILE` at the matching compose file and `HF_REPO`/
 `HF_FILE` at the benchmarked model — copy the sample you want to `.env` (or pass it
 directly as shown above) and the launch script downloads the model on first run.
+
+**Container-name bug found and fixed in Round 10**: `launch-server.sh` used to hardcode
+`CONTAINER_NAME="llama-cpp-gpu"` for every non-CPU profile, but three of the four GPU compose
+files run under a different `container_name:` (`llama-cpp-gpu-qwen-27b-mtp`,
+`llama-cpp-gpu-qwen-27b-uncensored`, `llama-cpp-gpu-gpt-oss-20b`). The script's own
+readiness-wait used to fail to attach to logs and report `Container stopped unexpectedly` even
+when the container was actually up and healthy. Fixed the same round: `CONTAINER_NAME` is now
+derived from each compose file's own `container_name:` line, so the script's readiness message
+is reliable for all four profiles.

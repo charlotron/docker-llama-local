@@ -81,13 +81,23 @@ LLAMA_PORT=${LLAMA_PORT:-12345}
 LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
 COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml"}
 
-# Determine container name and default models folder based on compose file
-if [[ "$COMPOSE_FILE" == *"cpu"* ]]; then
-    CONTAINER_NAME="llama-cpp"
-    MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
-else
-    CONTAINER_NAME="llama-cpp-gpu"
-    MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
+# Determine container name and default models folder based on compose file.
+# The container name is read directly from the compose file's own
+# `container_name:` line rather than guessed, since GPU profiles other than
+# the 35B default use profile-specific names (e.g. llama-cpp-gpu-qwen-27b-mtp)
+# -- a hardcoded guess here previously caused the script to attach to the
+# wrong container name and falsely report "Container stopped unexpectedly"
+# even when the real container was running and healthy.
+MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
+if [ -f "$COMPOSE_FILE" ]; then
+    CONTAINER_NAME=$(grep -m1 'container_name:' "$COMPOSE_FILE" | sed 's/.*container_name:[[:space:]]*//')
+fi
+if [ -z "$CONTAINER_NAME" ]; then
+    if [[ "$COMPOSE_FILE" == *"cpu"* ]]; then
+        CONTAINER_NAME="llama-cpp"
+    else
+        CONTAINER_NAME="llama-cpp-gpu"
+    fi
 fi
 
 FILE_NAME=$(basename "$HF_FILE")

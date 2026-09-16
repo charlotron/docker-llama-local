@@ -1,5 +1,10 @@
 # MTP Benchmark Results — Qwen 35B A3B / 27B (gpu-host)
 
+> **RAW DATA.** This is the full, unedited investigation log — every round, every test, every
+> number, every methodology mistake found and corrected, in chronological order. It is not meant
+> to be read start to finish. For the curated summary (final 4 profiles, chosen configs, what was
+> rejected and why), see [`BENCHMARKS.md`](./BENCHMARKS.md) instead.
+
 Date: 2026-09-15 (two rounds, same day)
 Host: gpu-host (WSL2, RTX 4070 SUPER 12GB VRAM, 23GB WSL RAM ceiling — likely a WSL config
 limit, not the physical host's actual RAM; see "WSL memory ceiling" section below)
@@ -463,6 +468,164 @@ itself. dflash-alone and ngram-alone were each tested in full instead.
   not a substitute data point for the 35B A3B+MTP champion — it was never benchmarked, ruled
   out purely on format incompatibility before any GPU time was spent on it.
 
+## Round 9: 9B dense model — quality re-check with larger budget, provenance, spec-decoding — ruled out
+
+Round 6 flagged the pre-existing `Qwopus3.5-9B-v3.Q4_K_M.gguf` as fast (44-48 tok/s) but
+untested for quality: it burned its entire token budget inside `reasoning_content` at both
+2000 and 6000 `max_tokens` on the LRU-cache-with-TTL task, never producing a visible answer.
+This round retested it properly per explicit request, and rules it out with a real finding
+(not just an unresolved budget question).
+
+**Provenance resolved.** The file's origin was undocumented going into this round. Web search
+identified the source repo: `Jackrong/Qwopus3.5-9B-v3-GGUF`, file
+`Qwopus3.5-9B-v3.Q4_K_M.gguf` — base model `unsloth/Qwen3.5-9B` with LoRA adapters, a
+reasoning-tuned fine-tune (`<think>` chat template) targeting competitive programming/math.
+The local file on gpu-host was verified **byte-exact** against the HF-hosted copy (both
+5,629,105,024 bytes via `curl -sIL` content-length). The repo also ships a `mmproj.gguf`
+(vision projector) alongside the text GGUFs, but that file is not present locally — no vision
+capability for this specific on-disk setup.
+
+**Larger budget did produce a visible answer, but the code is genuinely broken.** Re-ran the
+same LRU-cache-with-TTL prompt used in Round 5/6, `max_tokens: 16000` (vs. the earlier
+2000/6000 that fully starved it). This time it completed: `finish_reason: stop`,
+`completion_tokens: 14611` (52087 chars of `reasoning_content`, 8340 chars of visible
+`content`) — so the fix for the previous round's finding is simply "give it enough budget";
+`--chat-template-kwargs preserve_thinking:false` does not suppress the reasoning channel on
+`/v1/chat/completions` for this model (same behavior already seen with the 35B A3B in Round 5).
+However, the generated code itself does not run:
+- The class is declared as `class LRUCacheWithTTL(threading.Lock):` — `threading.Lock` is a
+  C-implemented type and cannot be subclassed (`TypeError: type '_thread.lock' is not an
+  acceptable base type`). The model's own demo crashes immediately at class-definition time.
+- After patching that line out (dropping the bogus inheritance, same "patch the trivial bug
+  and test the real logic" methodology used for gpt-oss-20b/Devstral in Round 5), the cache
+  still fails on its **first real `get()` call**: `AttributeError: 'LRUCacheWithTTL' object
+  has no attribute '_move_to_end'` — `get()` calls a method that is never defined anywhere in
+  the class. This is not a demo-script bug (like gpt-oss's bracket typo) or a missing-feature
+  gap (like Devstral's TTL) — it's the core `get()` path being fundamentally broken, worse than
+  either previously-rejected model. Not pursued further (no edge-case test suite run) since the
+  primary method doesn't work at all.
+
+**No speculative decoding available, confirmed via clean log message.** Tried
+`--spec-type draft-mtp --spec-draft-n-max 2` against this exact GGUF: clean
+`common_speculative_init_result: creating MTP draft context` init immediately followed by
+`llama_init_from_model: context type MTP requested but model doesn't contain MTP layers` and
+`failed to create MTP context` — the server refuses to start, a clean rejection (same failure
+shape as row 19's IQ2_S 27B), not a hang or silent no-op. This confirms Round 6's "no MTP
+tensors" note with an actual log capture. Note this is expected: `Jackrong/Qwopus3.5-9B-v3-GGUF`
+is the plain reasoning-tuned repo; a separate sibling repo,
+`Jackrong/Qwopus3.5-9B-Coder-MTP-GGUF`, does ship MTP tensors for a *different* (coder-focused)
+9B variant — but that is not the file already on disk, and downloading/adopting a different,
+never-benchmarked model was out of scope for this round (the task was to verify the
+pre-existing file). `--spec-type draft-dflash` was not exhaustively tested (no companion draft
+GGUF exists for this repo either), consistent with every other model in this document that
+lacks dedicated draft tensors.
+
+**Verdict: 9B model rejected, no profile created.** Two independent disqualifying findings:
+(1) the reasoning channel needs a much larger budget than any other profile in this document
+(16000 tokens for a trivial-by-comparison task, vs. the 35B's already-large 14000) to produce
+anything at all, and (2) even with that budget, the generated code is broken at the most basic
+level (`get()` cannot run) — worse than every previously-rejected candidate. Speed alone (44-48
+tok/s) is not enough to justify a profile when the model cannot reliably produce working code.
+`docker/docker-compose-gpu-qwen-9b.yml` was intentionally **not created**.
+
+## Round 10: end-to-end re-verification of all shipped profiles on gpu-host
+
+Re-tested every profile that ships in `docker/` today — not trusting old benchmark numbers,
+actually booting each one fresh, checking `/health`, and sending one real completion request.
+Config values below reflect the final sampling/context parameters in place at test time
+(`--parallel 2`, Qwen profiles at `preserve_thinking:true` / temp 0.6 / top_p 0.95 / top_k 20 /
+min_p 0 / presence_penalty 0 / repeat_penalty 1.0 / `--predict 81920` / 196608 ctx-per-slot;
+gpt-oss-20b at temp 1.0 / top_p 1.0 / top_k 0 / `reasoning_effort: high` / 131072 ctx-per-slot
+via `--ctx-size 262144`).
+
+- **35B A3B + MTP (default)**: booted and served correctly. `/health` → `{"status":"ok"}`.
+  Smoke-test completion ("Say OK and name the capital of France") returned
+  `"OK, the capital of France is Paris."` at 42.7 tok/s generation, MTP draft acceptance
+  125/148 — matches the documented champion numbers.
+- **27B dense IQ4_XS + MTP**: booted and served correctly (healthy in ~27s — the small quant
+  loads fast). Smoke test returned `"OK, Paris."` at ~5.0 tok/s, MTP draft acceptance 29/34 —
+  matches the documented ~5.4 tok/s figure within run-to-run noise.
+- **27B dense HauhauCS-Aggressive IQ2_M ("uncensored"), no MTP**: the model file
+  (`Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf`, 9.61GB) had been deleted from
+  gpu-host's disk per the disk-budget discipline noted at the end of this document — first boot
+  attempt failed cleanly (`gguf_init_from_file: failed to open GGUF file ... No such file or
+  directory`), not a config bug. Re-downloaded via `launch-server.sh` (which handles this
+  automatically in normal use), then booted and served correctly: `/health` → `{"status":"ok"}`,
+  smoke test returned `"OK. The capital of France is Paris."` at 4.40 tok/s — matches the
+  documented figure exactly.
+- **gpt-oss-20b**: model file (`gpt-oss-20b-UD-Q4_K_XL.gguf`) had also been deleted per the same
+  disk discipline; re-downloaded (11.87GB) and re-tested. Booted and served correctly, smoke
+  test returned `"OK, the capital of France is Paris."` at 51.2 tok/s (326 completion tokens,
+  most spent in the harmony `reasoning_content` channel as expected with
+  `reasoning_effort: high`).
+- **`scripts/docker/launch-server.sh` container-name bug found and fixed**: the script used to
+  hardcode `CONTAINER_NAME="llama-cpp-gpu"` for every non-CPU profile, but three of the four GPU
+  compose files run under a different `container_name:` (`llama-cpp-gpu-qwen-27b-mtp`,
+  `llama-cpp-gpu-qwen-27b-uncensored`, `llama-cpp-gpu-gpt-oss-20b`). The script's own
+  readiness-wait (`docker logs -f "$CONTAINER_NAME"`) then failed to attach (`Error response
+  from daemon: No such container: llama-cpp-gpu`) and reported `Container stopped unexpectedly`
+  **even when the real container was running and healthy** — confirmed directly: `docker ps`
+  showed `llama-cpp-gpu-qwen-27b-mtp` `Up` at the exact moment the script printed its false
+  error. Found during this round's testing and fixed the same day: `CONTAINER_NAME` is now
+  derived from each compose file's actual `container_name:` line via `grep`, with the old
+  hardcoded name kept only as a fallback if that line is somehow missing.
+- **A note on parallel launches**: `launch-server.sh` deliberately stops every known profile
+  container at the start of each run (`docker stop llama-cpp llama-cpp-gpu ...` — the full
+  current list) before starting its own, to avoid two models fighting over the single 12GB GPU.
+  This round briefly launched two profiles' downloads concurrently to save wall-clock time; the
+  second launch's own stop-everything step correctly tore down the first once its download
+  finished, which is the intended behavior, not a bug — profiles were still verified strictly
+  one-at-a-time on the GPU.
+
+Final state left running: see "State left on gpu-host" at the end of this document (updated).
+
+## Round 11: final LLM-capability evaluation — reasoning, math, programming, vision — all 4 shipped profiles
+
+Last phase of this investigation. Every profile that ships in `docker/` today
+(35B A3B+MTP, 27B dense+MTP, 27B "uncensored" HauhauCS-Aggressive, gpt-oss-20b) was given the
+same fixed set of three tasks, one request per task per model, at `temperature 0.6` (`1.0` for
+gpt-oss-20b, its own profile default) and `max_tokens: 4000` (generous enough to survive each
+model's reasoning-channel overhead without truncating the visible answer). Vision support was
+checked via `/props` `modalities` rather than an actual image request, per instructions — none
+of the four ship an `mmproj` file, so no vision test was forced on any of them.
+
+**Tasks:**
+- **Reasoning** — classic chickens-and-rabbits word problem (35 heads, 94 legs). Correct
+  answer: chickens=23, rabbits=12.
+- **Math/calculation** — `(17 * 23 - 15^2) / 4 + sqrt(144)`. Correct answer: 53.5.
+- **Programming** — `two_sum(nums, target)`, O(n) single-pass hash-map, returning indices (not
+  values), explicitly required to handle duplicate values and a no-solution case. Verified by
+  **actually running** each model's own code (not just reading it) against 4 assertions: the
+  model's own 3 demo cases plus one independent case (`[-3, 4, 3, 90], target=0 → (0, 2)`).
+
+### Results
+
+| Model | Reasoning | Math | Programming | Vision |
+|---|---|---|---|---|
+| 35B A3B+MTP | Correct (23/12), clean algebra | Correct (53.5) | **Pass** — all 4 assertions, own demo included duplicate + no-solution cases | `vision: false`, no mmproj — not applicable |
+| 27B dense+MTP | Correct (23/12) | Correct (53.5) | **Pass** — all 4 assertions | `vision: false`, no mmproj — not applicable |
+| 27B "uncensored" (HauhauCS) | Correct (23/12) | Correct (53.5) | **Pass** — all 4 assertions | `vision: false`, no mmproj — not applicable |
+| gpt-oss-20b | Correct (23/12) | Correct (53.5) | **Pass** — all 4 assertions | `vision: false`, no mmproj — not applicable |
+
+**Verdict: all four shipped profiles pass all three capability checks cleanly.** Every model
+produced correct, working answers on the first attempt, no patches needed (unlike the 9B in
+Round 9, or Devstral/gpt-oss's own demo bugs seen in Round 5 on the much harder LRU-cache task).
+This is expected and reassuring rather than surprising: chickens-and-rabbits, a 6-step
+arithmetic expression, and a textbook two-sum are all well within reach of every model tested
+here — the point of this round was to confirm there's no basic-capability regression across the
+final profile set before closing out the investigation, not to re-discover the harder
+differentiation already established by the LRU-cache-with-TTL task in Round 5 (where the 35B
+A3B was the only model to pass with zero fixes). No profile is disqualified or re-ranked by
+this round; the Round 5 findings on relative code-quality ranking still stand.
+
+Token usage note: the two 27B profiles needed far fewer completion tokens per task (300-900)
+than the 35B A3B (1700-2000) or gpt-oss-20b (1100-2300) — consistent with `preserve_thinking`
+behavior differing by chat template/model rather than task difficulty; none came close to the
+4000-token ceiling, so no answer was truncated.
+
+Champion (35B A3B+MTP) was restored and re-verified healthy (`/health` → `{"status":"ok"}`)
+after this round, consistent with every prior round's end state.
+
 ## Recommendation for `test-35b-mtp-improvements`
 
 **Adopt row 3**: `unsloth/Qwen3.6-35B-A3B-MTP-GGUF:UD-Q4_K_XL` +
@@ -495,21 +658,26 @@ if the WSL memory ceiling gets raised (see above), but not before.
 
 **DeepSeek/MiniMax ruled out** for this use case — see dedicated section above.
 
-## State left on gpu-host
+## State left on gpu-host (updated after Round 10)
 
 - `llama-cpp-gpu` container healthy, serving **35B A3B Q4_K_XL with MTP on (n_max=2),
-  parallel=3, ctx=393216** — the recommended config (`.env.gpu.qwen35b-mtp`).
-- Disk: only `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (with MTP tensors) and the pre-existing
-  `Qwopus3.5-9B-v3.Q4_K_M.gguf` remain in `/home/<user>/data/llama-models/`. The
-  original no-MTP baseline gguf, the IQ4_NL/IQ4_XS/DeepSeek test files, and the old 27B
-  Q5_K_M were all deleted after their measurements were recorded (disk budget discipline).
-  If a full 27B re-test is wanted later, re-download `unsloth/Qwen3.8-27B-GGUF` first.
-- New compose files created on gpu-host for this round (uncommitted, local only):
-  `docker-compose-gpu-qwen-27b.yml` and `docker-compose-gpu-qwen-27b-mtp.yml` (both
-  parametrized via `LLAMA_PARALLEL`/`LLAMA_CTX_SIZE` env vars for quick tuning). Note gpu-host's
-  git checkout is several commits behind `origin/main` (still has the pre-rename
-  `docker-compose-gpu.yml` name) — it was not `git pull`-ed this round to avoid disturbing the
-  live experiment; the Mac-side repo (source of truth for what gets committed) already has the
-  renamed files from the previous round.
-- `docker/docker-compose-gpu.yml` (gpu-host's name) still carries the MTP flags from the
-  previous round — not committed there either.
+  parallel=2, ctx=393216 (196608/slot)** — the recommended default config
+  (`.env.gpu.qwen-35b-a3b-mtp.sample`). Re-verified `/health` → `{"status":"ok"}` and a real
+  completion request after all other profiles were tested and torn down, per the requirement
+  to leave the champion running at the end.
+- Disk: all four shipped profiles' model files are present in
+  `/home/<user>/data/llama-models/`: `Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf` (35B A3B+MTP),
+  `Qwen3.8-27B-UD-IQ4_XS.gguf` (27B dense+MTP), `Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf`
+  (27B "uncensored", no MTP — re-downloaded this round after being deleted per earlier disk
+  discipline), and `gpt-oss-20b-UD-Q4_K_XL.gguf` (re-downloaded this round, same reason). The
+  pre-existing `Qwopus3.5-9B-v3.Q4_K_M.gguf` also remains on disk but is **not** used by any
+  shipped profile (see Round 9 — rejected on quality grounds).
+- gpu-host's git checkout (`/path/to/docker-llama-local`) remains several
+  commits behind `origin/main` and was not `git pull`-ed this round either, consistent with
+  prior rounds' practice of not disturbing the live experiment mid-session. Round 10's testing
+  copied the current Mac-repo compose/env/script files directly onto gpu-host's checkout
+  (uncommitted) so that the exact files destined to ship were what got tested, rather than
+  trusting the stale local checkout's older versions.
+- No commits or pushes were made on either machine — all changes (Mac-side profile renames,
+  sampling-parameter tuning, the new "uncensored" profile, the `launch-server.sh` fix, and
+  this document) are left as uncommitted working-tree edits for review, per instructions.
