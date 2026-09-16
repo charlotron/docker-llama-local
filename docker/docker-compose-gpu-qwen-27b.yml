@@ -1,19 +1,21 @@
 # =================================================================
 # DOCKER COMPOSE CONFIGURATION - GPU (CUDA), QWEN 27B DENSE MODE
 # =================================================================
-# Alternate profile to docker-compose-gpu.yml: a dense (non-MoE) 27B model
-# instead of the 35B A3B MoE. Benchmarked on gpu-host (RTX 4070 SUPER 12GB /
-# 23GB RAM) at 30.2 tok/s generation, stable across repeated runs -- see
-# BENCHMARK_RESULTS.md, row 6.
+# Alternate profile: a dense (non-MoE) 27B model instead of the 35B A3B MoE.
+# Best verified config on this hardware (RTX 4070 SUPER 12GB / 23GB WSL RAM):
+# IQ4_XS quant + MTP (--spec-type draft-mtp --spec-draft-n-max 2) at
+# --parallel 3 -- 5.4 tok/s, confirmed swap-free via 5s-interval `free -h`
+# polling through a full benchmark run. See docs/BENCHMARKS.md and
+# BENCHMARK_RESULTS.md (row 12) for full evidence.
 #
-# MTP was NOT enabled here on purpose. It measured faster in isolation
-# (+92% best case) but pushed host RAM to 94% and into swap at --parallel 3,
-# collapsing throughput below the non-MTP baseline (BENCHMARK_RESULTS.md,
-# rows 7-9). Until that memory behavior is diagnosed on a host with this
-# little RAM, --parallel 3 without MTP is the reliable, reproducible choice.
-# If you have more system RAM (32GB+) it's worth retrying --spec-type
-# draft-mtp --spec-draft-n-max 2 here the same way it's set up in
-# docker-compose-gpu.yml.
+# IMPORTANT CAVEAT: this is still far slower than the 35B A3B MoE profile
+# (42 tok/s) or gpt-oss-20b (42 tok/s) -- this profile exists for cases that
+# specifically need a dense (all-params-active) model, not as a speed pick.
+# A 27B dense model is compute-bound on this hardware (confirmed: smaller
+# and larger quants were all tried and none broke ~5-6 tok/s -- see
+# docs/BENCHMARKS.md "27B dense: every lever tried"). Bigger K-quants
+# (Q4_K_XL, Q5_K_M) measure slower, not faster -- do not "upgrade" the quant
+# expecting better throughput.
 
 name: docker-llama-gpu
 
@@ -36,7 +38,7 @@ services:
       # --- Basic Server Setup ---
       - "--server"
       - "--model"
-      - "/models/${TARGET_MODEL_FILE:-Qwen3.8-27B-UD-Q5_K_M.gguf}"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.8-27B-UD-IQ4_XS.gguf}"
       - "--alias"
       - "llama-local"
       - "--host"
@@ -77,6 +79,15 @@ services:
       - "--load-mode"
       - "mlock"
       - "--no-warmup"
+      # Multi-Token Prediction speculative decoding. Verified swap-free at
+      # --parallel 3 with the IQ4_XS quant above (smaller quant leaves enough
+      # RAM headroom); a larger quant like Q5_K_M pushed this host into swap
+      # at the same parallel level and made things SLOWER, not faster -- see
+      # docs/BENCHMARKS.md before changing TARGET_MODEL_FILE to a bigger quant.
+      - "--spec-type"
+      - "draft-mtp"
+      - "--spec-draft-n-max"
+      - "2"
 
       # --- CPU Thread Tuning ---
       - "--threads"

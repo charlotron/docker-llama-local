@@ -1,0 +1,119 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA), GPT-OSS-20B MODE
+# =================================================================
+# Alternate profile: OpenAI's open-weight gpt-oss-20b (MoE, ~3.6B active
+# params/token) instead of Qwen. Matches the 35B A3B+MTP champion's speed
+# (~42 tok/s) with NO speculative decoding needed, at roughly half the disk
+# footprint and a third of the host RAM -- see docs/BENCHMARKS.md.
+#
+# NOT promoted as the default yet. Two things to know before relying on it:
+# 1. Its "harmony" chat format has a separate reasoning channel that burns
+#    output tokens before the visible answer -- --predict/max_tokens needs
+#    meaningfully more headroom than Qwen needs for the same task (a 500-token
+#    budget wasn't enough for even a short coding answer; 1500+ was needed).
+# 2. It follows length constraints ("write ~400 words") more loosely than
+#    Qwen does in practice (measured +43% over target vs Qwen's +3%).
+# Tool-calling is confirmed present in its chat template (harmony format),
+# but an end-to-end tool-call round-trip has not been exercised yet -- verify
+# that for your agentic use case before treating this as equivalent to the
+# Qwen profiles for tool-heavy workflows.
+
+name: docker-llama-gpu
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+
+    container_name: llama-cpp-gpu-gpt-oss-20b
+
+    # Restrict container memory usage to protect host system stability
+    mem_limit: 24g
+
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+
+    command:
+      # --- Basic Server Setup ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-gpt-oss-20b-UD-Q4_K_XL.gguf}"
+      # Set the model alias (used as the model name in completions calls)
+      - "--alias"
+      - "llama-local"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      - "--jinja"
+
+      # --- VRAM & Memory Allocation ---
+      - "--fit-target"
+      - "1536"
+
+      # --- Context & Attention Options ---
+      # Same 393216 / 3 = 131072 (128K) per-slot split as the other profiles.
+      - "--ctx-size"
+      - "393216"
+      # Higher than the other profiles on purpose: gpt-oss's harmony reasoning
+      # channel consumes a chunk of the token budget before the visible
+      # answer starts. 32768 gave truncated/empty answers in testing at lower
+      # budgets (500 was not enough even for a short coding task).
+      - "--predict"
+      - "65536"
+      - "--flash-attn"
+      - "on"
+      - "--context-shift"
+
+      # --- Concurrency & Cache Optimization ---
+      - "--parallel"
+      - "3"
+      - "--cache-type-k"
+      - "q4_0"
+      - "--cache-type-v"
+      - "q4_0"
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      - "--load-mode"
+      - "mlock"
+      - "--no-warmup"
+      # No speculative decoding here: gpt-oss's architecture doesn't carry
+      # MTP/dflash-style draft tensors in this llama.cpp build, and it
+      # doesn't need any -- it already matches the MTP-accelerated Qwen
+      # champion on raw throughput without it.
+
+      # --- CPU Thread Tuning ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      - "--temp"
+      - "0.6"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0.05"
+      - "--presence-penalty"
+      - "0.2"
+      - "--repeat-penalty"
+      - "1.1"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped
