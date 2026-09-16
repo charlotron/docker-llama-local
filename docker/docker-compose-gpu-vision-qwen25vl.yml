@@ -1,0 +1,115 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) ACCELERATED MODE
+# VISION PROFILE: Qwen2.5-VL-7B-Instruct (multimodal, image+text input)
+# =================================================================
+# This is the only profile in this repo with vision/multimodal support.
+# All 4 other profiles (35B A3B+MTP, 27B-mtp, 27B-uncensored, gpt-oss-20b)
+# are text-only -- confirmed via /props and the absence of an mmproj file.
+# See docs/VISION_MODEL_EVAL.md for the full evaluation (PDF-page analysis
+# test, head-to-head vs. the 35B A3B text champion, VRAM/timing numbers).
+name: docker-llama-gpu-vision-qwen25vl
+
+services:
+  llama-cpp:
+    # Use the official high-performance CUDA-enabled llama.cpp docker image
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+
+    # Custom name for the running container
+    container_name: llama-cpp-gpu-vision-qwen25vl
+
+    # Restrict container memory usage to protect host system stability
+    mem_limit: 16g
+
+    # Expose the configured llama-server port to the host machine
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+
+    # Mount the local or external model directory into the container's /models folder.
+    # IMPORTANT: keep this on fast local storage, not a slow network/9p mount (e.g. a
+    # WSL2 /mnt/<drive> path backed by a Windows drive) -- loading this model+mmproj
+    # (~9.3GB total) from a 9p-mounted drive measured ~15MB/s raw read (~10+ minutes
+    # just to page in, and hung indefinitely under --load-mode mlock). Loading from a
+    # native Linux filesystem (e.g. ext4 under WSL2, not a Windows-drive bind mount)
+    # took well under a minute in testing.
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+
+    # Command-line flags passed directly to llama-server
+    command:
+      # --- Basic Server Setup ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen_Qwen2.5-VL-7B-Instruct-Q8_0.gguf}"
+      # The mmproj (multimodal projector) file is what actually enables vision --
+      # without it llama-server loads the base model as text-only. Must match the
+      # base model's vision tower exactly (Qwen2.5-VL-7B here).
+      - "--mmproj"
+      - "/models/${TARGET_MMPROJ_FILE:-mmproj-Qwen_Qwen2.5-VL-7B-Instruct-f16.gguf}"
+      - "--alias"
+      - "llama_image_analyzer"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- VRAM & Memory Allocation ---
+      - "--n-gpu-layers"
+      - "all"
+      - "--fit"
+      - "on"
+
+      # --- Context & Attention Options ---
+      # 8192 is plenty for a handful of page images + prompt/response; raise if you
+      # need multi-page batches in one request.
+      - "--ctx-size"
+      - "${LLAMA_CONTEXT_SIZE:-8192}"
+      - "--context-shift"
+      - "--batch-size"
+      - "512"
+      - "--ubatch-size"
+      - "256"
+      - "--flash-attn"
+      - "on"
+      - "--cache-type-k"
+      - "q8_0"
+      - "--cache-type-v"
+      - "q8_0"
+
+      # --- Model Loading ---
+      # NOTE: --no-mmap was REMOVED from llama.cpp in favor of --load-mode. Use "none"
+      # here, not "mlock" -- mlock on a large model over a slow/virtualized filesystem
+      # was observed to hang indefinitely (uninterruptible D-state disk wait) during
+      # testing. "none" loaded cleanly and fast once the GGUF files were on local disk.
+      - "--load-mode"
+      - "none"
+
+      # --- CPU Thread Tuning ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling Parameters ---
+      # Low temperature / deterministic-leaning preset, tuned for accurate document
+      # and image description/extraction rather than creative output.
+      - "--temp"
+      - "0.2"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "40"
+      - "--min-p"
+      - "0.05"
+      - "--repeat-penalty"
+      - "1.00"
+
+    # GPU Device Passthrough Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped

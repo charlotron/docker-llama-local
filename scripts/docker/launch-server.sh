@@ -113,76 +113,92 @@ print_info "Port      " "$LLAMA_PORT"
 
 mkdir -p "$MODEL_DIR"
 
-DOWNLOAD_URL="https://huggingface.co/$HF_REPO/resolve/main/$HF_FILE?download=true"
+# Downloads one file from a HF repo with strict resume/verify, retrying until
+# the local file matches the remote byte count and has a valid GGUF header.
+# Factored out so multimodal profiles can fetch a second file (the mmproj
+# vision projector) with the same rigor as the main model, instead of
+# duplicating this whole retry loop inline.
+download_gguf() {
+    local repo="$1" remote_file="$2" local_path="$3"
+    local download_url="https://huggingface.co/$repo/resolve/main/$remote_file?download=true"
 
-# --- 1. Get remote file size from Hugging Face ---
-print_step "Consulting remote model size on Hugging Face"
+    print_step "Consulting remote file size on Hugging Face ($remote_file)"
+    local remote_size
+    remote_size=$(curl -sIL --http1.1 "$download_url" | grep -i "^content-length:" | tail -n 1 | awk '{print $2}' | tr -d '\r')
 
-# Try getting size
-REMOTE_SIZE=$(curl -sIL --http1.1 "$DOWNLOAD_URL" | grep -i "^content-length:" | tail -n 1 | awk '{print $2}' | tr -d '\r')
-
-if [ -z "$REMOTE_SIZE" ] || ! [[ "$REMOTE_SIZE" =~ ^[0-9]+$ ]]; then
-    print_error "Could not retrieve remote file size. Check connection or URL."
-    exit 1
-fi
-
-REMOTE_SIZE_GB=$(awk "BEGIN {printf \"%.2f\", $REMOTE_SIZE/1073741824}")
-print_info "Expected Remote Size" "${REMOTE_SIZE_GB} GB (${REMOTE_SIZE} bytes)"
-
-# --- 2. Strict download and resume loop ---
-MAX_ATTEMPTS=20
-ATTEMPT=1
-
-while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-    LOCAL_SIZE=0
-    if [ -f "$MODEL_PATH" ]; then
-        LOCAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
+    if [ -z "$remote_size" ] || ! [[ "$remote_size" =~ ^[0-9]+$ ]]; then
+        print_error "Could not retrieve remote file size for $remote_file. Check connection or URL."
+        exit 1
     fi
 
-    # Check if bytes match exactly
-    if [ "$LOCAL_SIZE" -eq "$REMOTE_SIZE" ]; then
-        # Verify GGUF header
-        HEADER=$(head -c 4 "$MODEL_PATH" 2>/dev/null)
-        if [ "$HEADER" = "GGUF" ]; then
-            print_success "Local file is complete and verified (100% downloaded & GGUF OK)"
-            break
-        else
-            print_error "Size matches but header is not GGUF. Removing..."
-            rm -f "$MODEL_PATH"
+    local remote_size_gb
+    remote_size_gb=$(awk "BEGIN {printf \"%.2f\", $remote_size/1073741824}")
+    print_info "Expected Remote Size" "${remote_size_gb} GB (${remote_size} bytes)"
+
+    local max_attempts=20 attempt=1 local_size
+    while [ $attempt -le $max_attempts ]; do
+        local_size=0
+        if [ -f "$local_path" ]; then
+            local_size=$(stat -f%z "$local_path" 2>/dev/null || stat -c%s "$local_path" 2>/dev/null || echo 0)
         fi
+
+        if [ "$local_size" -eq "$remote_size" ]; then
+            local header
+            header=$(head -c 4 "$local_path" 2>/dev/null)
+            if [ "$header" = "GGUF" ]; then
+                print_success "Local file is complete and verified (100% downloaded & GGUF OK)"
+                return 0
+            else
+                print_error "Size matches but header is not GGUF. Removing..."
+                rm -f "$local_path"
+            fi
+        fi
+
+        local local_size_gb
+        local_size_gb=$(awk "BEGIN {printf \"%.2f\", $local_size/1073741824}")
+        print_header "DOWNLOAD IN PROGRESS (Attempt $attempt of $max_attempts) - $remote_file"
+        printf "  %bCurrent local progress: %s GB / %s GB%b\n" "${YELLOW}" "$local_size_gb" "$remote_size_gb" "${NC}"
+        printf "  %bResuming download with HTTP/1.1 and resume active...%b\n" "${CYAN}" "${NC}"
+
+        curl -L --http1.1 -C - \
+            --retry 10 \
+            --retry-delay 5 \
+            --retry-connrefused \
+            --connect-timeout 20 \
+            --progress-bar \
+            "$download_url" -o "$local_path"
+
+        local_size=$(stat -f%z "$local_path" 2>/dev/null || stat -c%s "$local_path" 2>/dev/null || echo 0)
+        if [ "$local_size" -eq "$remote_size" ]; then
+            print_success "Download completed 100%"
+            return 0
+        else
+            printf "\n%b! Download cut off before completing the %s GB. Retrying automatically in 5s...%b\n" "${RED}" "$remote_size_gb" "${NC}"
+            sleep 5
+            attempt=$((attempt + 1))
+        fi
+    done
+
+    local final_size
+    final_size=$(stat -f%z "$local_path" 2>/dev/null || stat -c%s "$local_path" 2>/dev/null || echo 0)
+    if [ "$final_size" -ne "$remote_size" ]; then
+        print_error "Failed to complete download of $remote_file after $max_attempts attempts."
+        exit 1
     fi
+}
 
-    LOCAL_SIZE_GB=$(awk "BEGIN {printf \"%.2f\", $LOCAL_SIZE/1073741824}")
-    print_header "DOWNLOAD IN PROGRESS (Attempt $ATTEMPT of $MAX_ATTEMPTS)"
-    printf "  %bCurrent local progress: %s GB / %s GB%b\n" "${YELLOW}" "$LOCAL_SIZE_GB" "$REMOTE_SIZE_GB" "${NC}"
-    printf "  %bResuming download with HTTP/1.1 and resume active...%b\n" "${CYAN}" "${NC}"
+download_gguf "$HF_REPO" "$HF_FILE" "$MODEL_PATH"
 
-    # Use --http1.1 to prevent HTTP/2 stream failures during large downloads
-    curl -L --http1.1 -C - \
-        --retry 10 \
-        --retry-delay 5 \
-        --retry-connrefused \
-        --connect-timeout 20 \
-        --progress-bar \
-        "$DOWNLOAD_URL" -o "$MODEL_PATH"
-
-    CURL_EXIT=$?
-
-    LOCAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
-    if [ "$LOCAL_SIZE" -eq "$REMOTE_SIZE" ]; then
-        print_success "Download completed 100%"
-        break
-    else
-        printf "\n%b! Download cut off before completing the %s GB. Retrying automatically in 5s...%b\n" "${RED}" "$REMOTE_SIZE_GB" "${NC}"
-        sleep 5
-        ATTEMPT=$((ATTEMPT + 1))
-    fi
-done
-
-FINAL_SIZE=$(stat -f%z "$MODEL_PATH" 2>/dev/null || stat -c%s "$MODEL_PATH" 2>/dev/null || echo 0)
-if [ "$FINAL_SIZE" -ne "$REMOTE_SIZE" ]; then
-    print_error "Failed to complete download after $MAX_ATTEMPTS attempts."
-    exit 1
+# Optional second file: the mmproj (vision projector) needed by multimodal
+# profiles (e.g. .env.gpu.vision-qwen25vl.sample). Only fetched if HF_MMPROJ_FILE
+# is set -- text-only profiles leave it unset and this is skipped entirely.
+if [ -n "$HF_MMPROJ_FILE" ]; then
+    MMPROJ_FILE_NAME=$(basename "$HF_MMPROJ_FILE")
+    MMPROJ_PATH="$MODEL_DIR/$MMPROJ_FILE_NAME"
+    export TARGET_MMPROJ_FILE="$MMPROJ_FILE_NAME"
+    print_info "MMProj Repo" "${HF_MMPROJ_REPO:-$HF_REPO}"
+    print_info "MMProj Path" "$HF_MMPROJ_FILE"
+    download_gguf "${HF_MMPROJ_REPO:-$HF_REPO}" "$HF_MMPROJ_FILE" "$MMPROJ_PATH"
 fi
 
 # --- 3. Docker Deployment ---
@@ -190,7 +206,7 @@ print_header "DOCKER DEPLOYMENT"
 print_step "Restarting services"
 
 # Stop active containers first to avoid conflicts
-docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b-mtp llama-cpp-gpu-qwen-27b-uncensored llama-cpp-gpu-gpt-oss-20b > /dev/null 2>&1
+docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b-mtp llama-cpp-gpu-qwen-27b-uncensored llama-cpp-gpu-gpt-oss-20b llama-cpp-gpu-vision-qwen25vl > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d
 
