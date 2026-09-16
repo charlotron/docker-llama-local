@@ -24,7 +24,7 @@ gpt-oss-20b runs temp 1.0/top_p 1.0/top_k 0, `reasoning_effort: high`, 131072 ct
 | Profile | Compose file | Model | Type | Quant | MTP | Speed (gen) | VRAM used | Host RAM used |
 |---|---|---|---|---|---|---|---|---|
 | **Default — fastest, most reliable** | `docker-compose-gpu-qwen-35b-a3b-mtp.yml` | Qwen 35B A3B | MoE, ~3B active/token | Q4_K_XL | **on** (`draft-mtp`, n-max 2) | **42.0 ± 3.6 tok/s** (n=8) | 9.67/12.28GB | 18.8/23.5GB |
-| **Dense alternative** | `docker-compose-gpu-qwen-27b-mtp.yml` | Qwen 27B | dense, 27B active/token | IQ4_XS | **on** (`draft-mtp`, n-max 2) | 5.4 ± 0.5 tok/s (n=5) | 8.65/12.28GB | 18/23GB |
+| **Dense alternative — reliability over speed** | `docker-compose-gpu-qwen-27b-mtp.yml` | Qwen 27B | dense, 27B active/token | IQ4_XS | **on** (`draft-mtp`, n-max 2) | 3.8-5.9 tok/s (n=5-8) | 8.65/12.28GB | 18/23GB |
 | **Dense, uncensored community fine-tune** | `docker-compose-gpu-qwen-27b-uncensored.yml` | Qwen 27B (HauhauCS-Aggressive fine-tune) | dense, 27B active/token | IQ2_M | **off** (real MTP tensors present but measured slower — 3.45 vs 4.40 tok/s, see Round 7) | 4.40 ± 0.02 tok/s (n=5) | 9.72/12.28GB | swap-free |
 | **Fast MoE alternative, smaller footprint** | `docker-compose-gpu-gpt-oss-20b.yml` | gpt-oss-20b | MoE, ~3.6B active/token | Q4_K_XL | n/a (no MTP tensors in this arch) | 42.19 ± 6.00 tok/s (n=5) | 10.44/12.28GB | 6.4/23GB |
 
@@ -36,6 +36,44 @@ code-quality task tried (a thread-safe LRU cache with TTL — see "Code quality"
 evaluated as a possible 5th profile and rejected** — see "Models/configs tried and rejected"
 below and `BENCHMARK_RESULTS.md` Round 9 for the full writeup. Fast (44-48 tok/s) but its
 generated code doesn't run even after fixing the obvious bugs.
+
+**Round 12 (reliability follow-up, by explicit request): the 27B dense profile keeps
+thinking mode ON and is NOT a speed pick — budget 2-2.5 hours wall-clock for a hard coding
+task.** Re-ran the exact Round 5 LRU-cache-with-TTL prompt end to end against the shipped
+config as-is (thinking on, `--predict 81920`): completed cleanly within budget in 141
+minutes (8467.6s), generated flawless code that passed its own demo and all 10 independent
+edge-case tests with zero fixes. The Round 5 failure ("burns the whole budget in reasoning
+before producing any answer") does not reproduce at this larger `--predict` value — it was
+specific to the much smaller 4000/8000-token budgets in place back then. A
+`--reasoning-budget 65536` / `--reasoning-budget-message` safety net (a real llama.cpp flag,
+separate from `--predict`, that caps only the reasoning channel) was added as extra
+insurance against a future, harder prompt reasoning for even longer. External draft-model
+speculative decoding (`--spec-type draft-simple -md Qwen3-0.6B-GGUF`) was tried and cleanly
+rejected: server logs "the target and draft vocabs are not compatible" — no vocab-compatible
+small drafter exists for this specific 27B repo. See `BENCHMARK_RESULTS.md` Round 12 for the
+full writeup.
+
+**Round 12b — the core question: is the 27B's code actually *better* than the 35B A3B's, or
+just "it works but takes 2+ hours"?** Re-ran the 35B A3B champion on the identical LRU-cache
+prompt/sampling used above (its original Round-5 code was never saved to disk, so this
+was a fresh, fair, same-conditions re-run) and read both models' generated code side by
+side, not just "both pass tests." **Honest answer: the 27B is measurably more careful in
+this sample, by a real but narrow margin — not a decisive quality jump.** The 27B got a
+genuine edge case right that the 35B got wrong (`ttl=0` immediate expiry: 27B uses `>=`,
+35B uses `>` and misses it), enforces the prompt's "no `time.time()` internally"
+requirement more strictly (27B raises an error if a TTL is requested with no clock; the 35B
+silently falls back to real `time.time()`), and used a more sophisticated TTL-cleanup data
+structure (a min-heap vs. the 35B's plain linear scan). But **both models made the same
+class of mistake in their own hand-written demo**: each wrote a `contains()`-then-evict test
+with the MRU/LRU order backwards, so **both demos crash with `AssertionError` when actually
+run**, and both underlying cache classes pass 9-10 of the same 10 independent tests. So on
+"does more active compute per token produce more careful demo/test-writing," this one sample
+does not show a clear 27B advantage. **Bottom line for the value proposition**: keep this
+profile for reliability-with-patience and for cases that specifically need a dense
+(non-MoE) architecture — not on an expectation of meaningfully better code quality than the
+35B A3B champion, which this comparison does not support as a strong claim. Both outputs
+still need a human/test pass; neither is "trust blindly." See `BENCHMARK_RESULTS.md`
+Round 12b for the full side-by-side.
 
 ## Why these three, and not others
 
@@ -117,10 +155,12 @@ the only model that passed with zero fixes.
   end-to-end (template presence confirmed, an actual function-call cycle has not). The
   profile is included here because the data is promising, not because it's a proven drop-in
   replacement — validate tool-calling for your specific agent workflow before relying on it.
-- **27B + external draft-model speculative decoding**: the one lever not yet tried for the
-  27B (a small separate Qwen model as an `-md` drafter, a different mechanism from MTP).
-  Every other lever tried — bigger/smaller quant (Q5_K_M down to IQ2_S), MTP, dflash (both
-  the earlier no-op and a genuinely working DFlash2 draft in Round 8), ngram, and two
+- **27B + external draft-model speculative decoding — now closed, rejected (Round 12)**:
+  tried `--spec-type draft-simple -md Qwen3-0.6B-GGUF`; fails to initialize
+  ("the target and draft vocabs are not compatible") since this specific 27B repo's
+  tokenizer/vocab doesn't match the generic small Qwen3 GGUF. Every lever tried for the
+  27B — bigger/smaller quant (Q5_K_M down to IQ2_S), MTP, dflash (both the earlier no-op
+  and a genuinely working DFlash2 draft in Round 8), ngram, external draft-model, and two
   community fine-tunes with real MTP/DFlash2 tensors — tops out around 4–6 tok/s, and the
   best *clean* number remains IQ4_XS+MTP at 5.4 tok/s.
 - **Stacking `--spec-type` strategies (e.g. dflash + ngram together)**: confirmed

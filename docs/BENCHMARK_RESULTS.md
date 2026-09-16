@@ -658,7 +658,229 @@ if the WSL memory ceiling gets raised (see above), but not before.
 
 **DeepSeek/MiniMax ruled out** for this use case — see dedicated section above.
 
-## State left on gpu-host (updated after Round 10)
+## Round 12: 27B reliability-over-speed follow-up (thinking ON, large predict budget, external draft model)
+
+Explicit user request: keep thinking mode ON for the 27B profile (already the shipped
+config, not up for debate this round) and land on a config that never runs out of
+reasoning budget mid-thought on a hard coding task, even if it's slow — speed is no longer
+the goal.
+
+**1. Re-ran the exact Round 5 LRU-cache-with-TTL prompt against the shipped config
+as-is** (thinking on, `--predict 81920`, temp 0.6/top_p 0.95/top_k 20/min_p 0/
+presence_penalty 0/repeat_penalty 1.0, `--parallel 2`, MTP `draft-mtp` n-max 2) — the same
+prompt that failed outright in Round 5 at the much smaller 4000/8000-token budgets in place
+back then. Result:
+
+- **Completed cleanly within budget**: `finish_reason: stop`, `completion_tokens: 31878`
+  (of the 81920 ceiling) — nowhere close to truncation.
+- **Reasoning vs answer split**: ~110,528 chars of `reasoning_content` (~27.6K tokens) vs
+  11,368 chars of visible `content` (~2.8K tokens) — the model reasoned for a long while but
+  did leave itself room to answer, unlike the Round 5 failure.
+- **Wall-clock: 8467.6s (~141 minutes / 2h21m)**, generation speed 3.8-5.9 tok/s
+  (fluctuating with system load, consistent with the documented 5.4 tok/s ceiling), MTP
+  draft acceptance 0.687 (18447/26864 draft tokens accepted).
+- **Code quality: flawless.** Extracted the generated Python (dict + doubly-linked-list +
+  min-heap for lazy TTL expiry, single `threading.Lock` guarding every method, clock
+  injected and used consistently, `contains()`/`__contains__` correctly not touching
+  recency). Ran its own embedded demo (`All tests passed.`) AND all 10 independent
+  edge-case tests used throughout this document (capacity=1, ttl=0, missing key/default,
+  `__contains__` not affecting recency, mixed get/put eviction order, `__len__`, key-update
+  reuse, injected-clock expiry, no-TTL entries never expiring, an 8-worker/50-iteration
+  concurrency smoke test) — **zero fixes needed, all passed.**
+- **Conclusion: the shipped config already satisfies the reliability requirement.** The
+  Round 5 failure was specific to that round's much smaller 4000/8000-token budgets, not to
+  thinking mode itself or the 27B's reasoning behavior in general — raising `--predict` to
+  81920 (already done in an earlier commit, before this round started) already fixed it.
+  Nothing about this profile needed to change on correctness grounds; the only open
+  question was hardening it further and documenting realistic timing.
+
+**2. External draft-model speculative decoding (`--spec-type draft-simple` + `-md`/
+`--model-draft`) — tried, and cleanly rejected.** Confirmed via `llama-server --help` in
+the deployed image (`ghcr.io/ggml-org/llama.cpp:full-cuda`, build b10975) that the correct
+modern flag for this mechanism is `--spec-type draft-simple` combined with
+`--spec-draft-model`/`-md` (not `draft-mtp`, which is the model's own built-in MTP head —
+a different mechanism from an external full draft model). Downloaded
+`Qwen/Qwen3-0.6B-GGUF:Qwen3-0.6B-Q8_0.gguf` (639MB) as a small, fast, readily-available
+same-family drafter and paired it with the 27B target
+(`--model /models/Qwen3.8-27B-UD-IQ4_XS.gguf --model-draft /models/Qwen3-0.6B-Q8_0.gguf
+--spec-type draft-simple --spec-draft-n-max 5`). Server loads both models but fails to
+initialize speculative decoding: `the target and draft vocabs are not compatible` /
+`draft model vocab type must match target model to use speculation` — a clean, logged
+rejection, not a hang or silent no-op (same failure class as the dflash tensor mismatch in
+Round 6). The server falls back to running the 27B alone with no speculation active, so no
+speedup was measured because none was possible. This 27B GGUF (`unsloth/Qwen3.8-27B-GGUF`)
+does not share a tokenizer/vocab with the generic `Qwen/Qwen3-0.6B-GGUF` release, and no
+vocab-compatible small sibling for this specific 27B repo/quant family was found within this
+round's time budget. **Verdict: external draft-model speculative decoding is not viable for
+this profile with a readily-available small model** — closes the "one lever never tried"
+item flagged throughout this document (Rounds 6-8). Would need a purpose-built small draft
+GGUF sharing this exact model's tokenizer, which does not appear to exist publicly.
+
+**3. Surgical reasoning-budget control — real, and now adopted.** `llama-server --help`
+confirms a genuine `--reasoning-budget N` flag (env `LLAMA_ARG_THINK_BUDGET`): "token budget
+for thinking: -1 for unrestricted, 0 for immediate end, N>0 for token budget", paired with
+`--reasoning-budget-message MESSAGE` ("message injected before the end-of-thinking tag when
+reasoning budget is exhausted"). This is a real, separate cap from `--predict` — it targets
+only the reasoning channel, forcing a transition to the visible answer once hit, rather than
+capping the whole response length. Not strictly needed to pass this round's test (the model
+used only ~27.6K of a would-be 65536 cap), but adopted as a belt-and-suspenders safety net
+in the shipped compose file: `--reasoning-budget 65536` (guarantees at least ~16K tokens of
+the 81920 total are left for the visible answer even in a worse case) +
+`--reasoning-budget-message "Time is nearly up. Stop reasoning now and write the final
+answer using what you have concluded so far."` This directly addresses the Round 5 failure
+mode at the mechanism level, not just by raising `--predict` and hoping.
+
+**4. Sampling tweaks for "more efficient" reasoning — nothing real found, none applied.**
+Re-checked Qwen's own documentation/model-card guidance already consulted earlier in this
+investigation for the "thinking mode for precise coding tasks" preset in use
+(temp 0.6/top_p 0.95/top_k 20/min_p 0/presence_penalty 0/repeat_penalty 1.0) — this is
+Qwen's own recommended preset already in place; there is no separate documented "reasoning
+efficiency" or "budget forcing" sampling knob distinct from `--reasoning-budget` above.
+Nothing invented; no change made here.
+
+**Final config adopted for `docker-compose-gpu-qwen-27b-mtp.yml`**: unchanged from the
+already-shipped config (thinking on, `--predict 81920`, MTP `draft-mtp` n-max 2, Qwen's
+official sampling preset), **plus** the new `--reasoning-budget 65536` /
+`--reasoning-budget-message` safety net from item 3. External draft-model speculative
+decoding stays off (rejected, item 2).
+
+**5. Comparison-only: same prompt with thinking OFF (`--reasoning off`).** Not a candidate
+to replace the shipped thinking-ON config (the user explicitly ruled disabling thinking out
+for the shipped profile) — run purely as a data point to measure the reliability cost of
+thinking mode. Same 27B/IQ4_XS/MTP config, `--reasoning off` instead of the default
+preserve-thinking behavior (confirmed via server log: zero `reasoning_content` produced,
+real thinking-off this time — earlier rounds noted `preserve_thinking:false` via
+chat-template-kwargs does *not* reliably suppress the channel on this endpoint, so this
+round used the dedicated `--reasoning off` CLI flag instead, which did work cleanly).
+
+- **Wall-clock: 467.4s (~7.8 minutes)** — 18x faster than thinking-on, as expected with the
+  reasoning channel fully removed. `completion_tokens: 2598`, `reasoning_content` empty.
+- **Code quality: real functional bug in its own self-authored test, core logic actually
+  fine.** The generated `LRUCache` class itself is correct — verified by extracting it and
+  running the same 10 independent edge-case tests used throughout this document: **all 10
+  passed** (capacity=1, ttl=0, missing key/default, `__contains__` non-mutating, mixed
+  get/put order, `__len__`, key-update reuse, injected-clock TTL both sides, no-TTL
+  permanence, 10-thread concurrency smoke test). However, its **own embedded `unittest`
+  suite fails one of its own tests**: `test_contains_does_not_affect_recency` asserts that
+  after checking `"a" in cache` / `cache.contains("a")` (capacity 2, `a` inserted before
+  `b`), then inserting `"c"`, `"a"` should survive and `"b"` should be evicted. That is
+  backwards — per the class's own (correct) implementation, a `contains()` check must NOT
+  bump recency, so `"a"` (inserted first, never legitimately "used") is the correct LRU
+  eviction victim, not `"b"`. The model, without a thinking pass to catch this, wrote a test
+  whose assertion silently assumed `contains()` *does* affect recency — directly
+  contradicting the docstring it wrote one line above and the explicit prompt requirement.
+  Running its own demo therefore **raises `AssertionError` and crashes on first run**,
+  exactly the kind of self-verification failure thinking mode exists to catch.
+- **Conclusion**: disabling thinking does not corrupt the underlying algorithm here (the
+  27B is capable enough to get the core LRU/TTL logic right zero-shot), but it removes the
+  self-verification pass that catches subtle test-writing mistakes — the visible symptom a
+  user would actually hit is "the demo it gave me crashes," same practical failure mode as
+  Devstral's and gpt-oss's demo bugs elsewhere in this document. This is concrete evidence
+  *for* keeping thinking on for this profile, consistent with the user's instruction not to
+  disable it.
+
+| Config | tok/s | Wall-clock (LRU-cache task) | Completed within budget? | Code correctness |
+|---|---|---|---|---|
+| **Shipped config, thinking ON, `--predict 81920`** (adopted, + reasoning-budget added) | 3.8-5.9 (avg ~4.7) | **141 min** | Yes (31998/81920 tokens) | **Flawless — 0 fixes, all 10 edge cases pass** |
+| Same + `--spec-type draft-simple -md Qwen3-0.6B` | n/a — init failed | n/a | n/a | Not reached — vocab-incompatible, rejected before any generation |
+| Same, thinking OFF (`--reasoning off`, comparison only, not adopted) | ~35-40 (est. from MTP-off dense-model norms; not separately measured) | **7.8 min** | Yes (2598/81920 tokens) | Core logic correct (10/10 independent tests pass), but **its own demo crashes** on a self-authored test bug thinking mode would likely have caught |
+
+**Recommendation**: keep this profile exactly as documented, with the reasoning-budget
+safety net added. Set expectations honestly: **budget 2-2.5 hours wall-clock for a hard
+coding task** on this profile. It is not a speed pick — it exists for cases that need a
+reliable dense model and can tolerate the wait; the 35B A3B+MTP champion remains the right
+default for anyone who needs both speed and reliability.
+
+## Round 12b: does the 27B dense model actually produce *better* code than the 35B A3B+MTP champion?
+
+This is the deciding question the whole profile hinges on — the user's own framing:
+*"se supone que el 27b debería de funcionar mejor en cuanto a calidad que el 35b, sino no me
+aporta nada con la perdida de velocidad"* (the 27B is supposed to be better quality than the
+35B, otherwise it gives nothing for the speed it loses). Round 5's original writeup only
+described the 35B's Round-5 output narratively — the actual generated code from that run
+was never saved to disk, so a real side-by-side line-level read was not possible against
+that specific transcript. To answer honestly, the 35B champion was re-booted this round
+(`docker-compose-gpu-qwen-35b-a3b-mtp.yml`, unchanged config) and given the **exact same
+prompt, temperature, and sampling parameters** as this round's 27B test, and both finished
+code bodies were read side by side and independently tested.
+
+**35B A3B+MTP, this round's regenerated run**: completed in **184s** (3 minutes),
+9194 completion tokens (28K reasoning chars / 8K answer chars). Passed its own embedded
+demo. Passed 9 of the same 10 independent edge-case tests — **failed the `ttl=0` immediate-
+expiry case**: its TTL check uses strict `self.clock() > node.expiry` rather than `>=`, so
+an entry with `ttl=0` is not considered expired until *after* the expiry instant has
+strictly passed, not at it. Separately, its constructor does `self.clock = clock or
+time.time` — meaning if no clock is passed, it silently falls back to real
+`time.time()` internally, a direct (if minor/defensive) deviation from the prompt's explicit
+"not `time.time()` internally" requirement (this only matters if the caller forgets to pass
+a clock; when a clock is provided, as in every test above, `time.time()` is never reached).
+Its own self-authored demo also contains a **subtle test-design bug of the same shape** seen
+in the 27B thinking-off run above: a comment mislabels which key is MRU vs LRU before a
+`__contains__` check, so `demo_and_test()` throws `AssertionError` when actually executed
+as its own `__main__` block (only the two isolated `assert` blocks above that specific test
+passed; the third block's assertion is backwards for the same reason as the 27B's).
+
+**27B dense+MTP, this round's Round-12 run** (already detailed above): completed in
+141 minutes, flawless on its own demo AND all 10 independent tests, correctly used `>=` for
+TTL boundary (ttl=0 expires immediately, matching the more defensible reading of the spec),
+never silently defaults to `time.time()` (raises `ValueError` if a TTL is requested without
+a clock — a stricter, more correct enforcement of "no `time.time()` internally" than the
+35B's fallback), and used a min-heap for O(log n) amortized lazy expiry cleanup (a genuinely
+more sophisticated design choice than either the 35B's or the no-thinking 27B's plain
+linear/dict-based expiry handling) alongside the required O(1) `get`/`put`.
+
+**Honest verdict: yes, on this specific run, the 27B's code is measurably better — but by a
+narrow, specific margin, not a decisive one.** Concretely:
+- The 27B got a real edge case right (`ttl=0`) that the 35B got wrong.
+- The 27B's clock-injection discipline is stricter (hard failure vs. silent fallback) than
+  the prompt's explicit ask.
+- The 27B's TTL-cleanup data structure (min-heap) is a more considered design choice than
+  the 35B's approach.
+- **But** the 35B made the *same category* of self-verification mistake in its own demo
+  test as the 27B's thinking-OFF run did (a backwards MRU/LRU assumption in a hand-written
+  test) — so on the "does more active compute produce more careful demo/test-writing"
+  question specifically, the 35B (with thinking ON) did **not** clearly outperform the 27B
+  (thinking OFF) on that axis in this comparison; both models' *demos* had a bug, only their
+  core cache classes differed in correctness.
+- Both models' *core cache logic* passed 9-10 of the same 10 independent tests — this is
+  not "35B fundamentally worse," it's a couple of specific boundary-condition misses on an
+  otherwise-equivalent implementation.
+
+**What this means for the profile's value proposition**: the 27B does not deliver a
+transformative quality jump that would justify its ~46x slower wall-clock time on
+raw code quality alone (both models produce working, thread-safe LRU-cache implementations
+that pass the vast majority of the same tests). The real, defensible reasons to keep this
+profile are (a) it is *measurably* more careful about edge cases and spec literalism in this
+one sample (small effect, not zero), and (b) it is the only shipped profile that is dense
+(non-MoE, all params active per token) rather than MoE-routed, which matters specifically if
+dense-model behavior itself (not raw score) is what's needed — not because "dense = smarter"
+in general, which this comparison does not support as a strong claim. Users choosing this
+profile should do so for **reliability-with-patience and a preference for a dense
+architecture**, not for an expected step-change in code quality over the 35B A3B champion.
+Both model outputs still needed a human/test pass to catch their respective single bugs —
+neither is "trust blindly," a caveat this document has made about every model tested.
+
+## State left on gpu-host (updated after Round 12)
+
+Per explicit user request this round: **no container was left running at the end** (power
+saving, superseding every earlier round's practice of restoring the 35B A3B+MTP champion as
+the final state). All containers created or used during this round's testing
+(`llama-cpp-gpu-qwen-27b-mtp`, the ad-hoc `llama-27b-draftsimple` draft-model test container)
+were stopped and removed; `./scripts/docker/stop-all-servers.sh` was run as the final step
+and confirmed 0 MiB VRAM in use. Re-launch with
+`./scripts/docker/launch-server.sh` (35B A3B champion, default) or
+`./scripts/docker/launch-server.sh .env.gpu.qwen-27b-mtp` (this round's profile) as needed.
+
+Disk: added `Qwen3-0.6B-Q8_0.gguf` (639MB) to `/home/<user>/data/llama-models/` as
+the rejected draft-model candidate from item 2 above — left on disk since it's small and
+documents the experiment; delete it if disk space is tight, it is not referenced by any
+shipped profile.
+
+No commits or pushes were made — all changes (this document, `BENCHMARKS.md`, the 27B
+compose file, and its `.env.sample`) are left as uncommitted working-tree edits for review,
+per instructions.
+
+## State left on gpu-host (Round 10, historical)
 
 - `llama-cpp-gpu` container healthy, serving **35B A3B Q4_K_XL with MTP on (n_max=2),
   parallel=2, ctx=393216 (196608/slot)** — the recommended default config

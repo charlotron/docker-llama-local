@@ -16,6 +16,32 @@
 # docs/BENCHMARKS.md "27B dense: every lever tried"). Bigger K-quants
 # (Q4_K_XL, Q5_K_M) measure slower, not faster -- do not "upgrade" the quant
 # expecting better throughput.
+#
+# ROUND 12 UPDATE -- reliability over speed, by explicit request. Thinking mode
+# stays ON (preserve_thinking:true below) and --predict stays at 81920. Re-ran
+# the exact Round 5 LRU-cache-with-TTL prompt end to end against this profile
+# as committed: it completed cleanly inside budget (31998/81920 total tokens,
+# finish_reason=stop, MTP draft acceptance 0.687) and the generated code passed
+# its own demo AND all 10 independent edge-case tests with ZERO fixes needed --
+# it did NOT reproduce the Round 5 "burns the whole budget in reasoning" failure
+# from back when --predict was only 4000-8000. Wall-clock: ~141 minutes (8468s)
+# at ~4-5.8 tok/s -- budget 2-2.5 hours for a hard coding task on this profile.
+# Added --reasoning-budget/--reasoning-budget-message below as a belt-and-
+# suspenders safety net so a future harder prompt can never repeat the old
+# failure mode even if it tries to reason far longer than this one did.
+#
+# Two other levers were tried this round and explicitly rejected, see
+# docs/BENCHMARK_RESULTS.md Round 12 for full detail:
+# - External draft-model speculative decoding (--spec-type draft-simple -md
+#   <small-model>): loads, but fails cleanly at init ("the target and draft
+#   vocabs are not compatible") with Qwen3-0.6B-GGUF as drafter -- this 27B's
+#   tokenizer/vocab does not match the generic small Qwen3 GGUFs. No
+#   vocab-compatible small sibling was found for this specific 27B repo. Not a
+#   config problem to "fix" -- same class of hard incompatibility as the
+#   dflash/ngram no-ops already documented for this model.
+# - Sampling tweaks for "more efficient" reasoning: no such Qwen-documented
+#   control exists beyond enabling/disabling thinking outright (ruled out by
+#   the user) -- temp/top_p/top_k are creativity knobs, not budget knobs.
 
 name: docker-llama-gpu
 
@@ -63,6 +89,20 @@ services:
       # math tasks) -- only a cap, not a forced length; still stops at EOS.
       - "--predict"
       - "81920"
+      # Surgical reasoning-budget safety net (Round 12): caps the THINKING
+      # channel specifically, separate from --predict's cap on the whole
+      # response. Set to leave a guaranteed ~16K tokens for the visible
+      # answer even in the worst case, instead of relying purely on the
+      # model choosing to stop reasoning on its own. Not needed for the
+      # Round 12 LRU-cache task (it used ~27.6K reasoning tokens, well under
+      # this cap) but protects against a harder future prompt reasoning much
+      # longer. --reasoning-budget-message injects a closing nudge into the
+      # reasoning trace when the budget is hit, so the model is pushed to
+      # actually answer instead of being cut off mid-thought.
+      - "--reasoning-budget"
+      - "65536"
+      - "--reasoning-budget-message"
+      - "Time is nearly up. Stop reasoning now and write the final answer using what you have concluded so far."
       - "--flash-attn"
       - "on"
       - "--context-shift"
