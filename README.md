@@ -20,7 +20,7 @@ Choose your mode and create your `.env` file:
 
 **For NVIDIA GPU (Recommended):**
 ```bash
-cp .env.gpu.sample .env
+cp .env.gpu.qwen-35b-a3b-mtp.sample .env
 ```
 
 **For CPU only:**

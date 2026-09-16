@@ -163,6 +163,15 @@ untimed warmup request before each measured run.
 | 16 | gpt-oss-20b UD-Q4_K_XL (MoE, ~3.6B active) | unsloth/gpt-oss-20b-GGUF | 10975 | n/a (no MTP for this arch) | 3 / 131072 | **42.37 ± 4.24** (n=3: 44.17/43.02/39.93) | 27.0-71.5 (noisy) | 10.45/12.28GB | 6.4/23GB used, 15GB free/cache, swap 432MiB (pre-existing, not from this run) | tool-call (harmony format) confirmed; code correct, well-documented expand-around-center solution |
 | 17 | gpt-oss-20b UD-Q4_K_XL (re-verify, n=5) | unsloth/gpt-oss-20b-GGUF | 10975 | n/a | 3 / 131072 | **42.19 ± 6.00** (n=5: 46.78/41.27/41.08/40.78/41.05) | 25.9-64.1 (noisy, cache-dependent) | 10.44/12.28GB (mid-generation) | 6.4/23GB used, no swap growth | code correct (needed `max_tokens 1500` — harmony reasoning channel burns tokens before the answer, 500 wasn't enough); essay ran 571 words vs the ~400 target (over by 43%, still coherent/structured) |
 | 18 | 27B dense IQ4_XS + MTP, `spec-draft-n-max=4` | unsloth/Qwen3.8-27B-GGUF | 10975 | **4** | 3 / 131072 | **4.61 ± 0.45** (n=3: 4.66/4.36/4.81) — worse than row 12's n-max=2 | — | — | 20/23GB, swap 526MiB (up slightly from row 12's 438-360MiB baseline, still flat/no growth trend) | not evaluated (ruled out by speed alone) |
+| 19 | 27B dense IQ2_S | unsloth/Qwen3.8-27B-GGUF | 10975 | n/a — **GGUF has no MTP/nextn tensors**, `--spec-type draft-mtp` fails cleanly (`context type MTP requested but model doesn't contain MTP layers`) | 3 / 131072 | **5.26 ± 0.45** (n=5: 5.32/5.57/5.19/5.12/5.12) | — | 9.33/12.28GB | swap-free (13MiB used, flat) | not evaluated |
+| 20 | 27B dense Q3_K_XL | unsloth/Qwen3.8-27B-GGUF | 10975 | none | 3 / 131072 | **4.03 ± 0.13** (n=5: 3.98/4.05/4.09/4.05/3.96) | — | 9.75/12.28GB | swap-free (30MiB used, flat) | not evaluated |
+| 21 | 27B dense Q3_K_XL + MTP | unsloth/Qwen3.8-27B-GGUF | 10975 | **2** | 3 / 131072 | **3.97 ± 0.14** (n=5: 4.03/3.81/4.09/3.85/4.09) — no gain over row 20, consistent with compute-bound finding | — | 8.65/12.28GB | 166MiB swap touched (minor, not the heavy contamination seen in row 7/pre-Round-6 Q4_K_XL run) | not evaluated |
+| 22 | 27B dense HauhauCS-Aggressive Q2_K_P (**community fine-tune**, not unsloth/base line) | HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF | 10975 | none | 3 / 131072 | **4.17 ± 0.17** (n=5: 4.06/4.21/4.23/4.15/4.20) | — | 9.7/12.28GB | swap-free (104MiB used, flat) | coherent output on reverse-string sanity check, correct reasoning trace |
+| 23 | 27B dense HauhauCS-Aggressive Q2_K_P + MTP (**community fine-tune**) | HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF | 10975 | **2** | 3 / 131072 | **3.31 ± 0.14** (n=5: 3.33/3.35/3.36/3.21/3.31) — *worse* than row 22, MTP tensors confirmed real (`creating MTP draft context`, clean init) | — | 8.9/12.28GB | 248MiB swap touched (minor) | not re-evaluated (already confirmed coherent at row 22) |
+| 24 | 27B dense HauhauCS-Aggressive IQ2_M (**community fine-tune**) | HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF | 10975 | none | 3 / 131072 | **4.40 ± 0.02** (n=5: 4.38/4.40/4.41/4.40/4.42, tightest spread of any 27B run) | — | 9.72/12.28GB | swap-free (168MiB used, flat) | coherent output on reverse-string sanity check |
+| 25 | 27B dense HauhauCS-Aggressive IQ2_M + MTP (**community fine-tune**) | HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF | 10975 | **2** | 3 / 131072 | **3.45 ± 0.20** (n=5: 3.31/3.71/3.31/3.37/3.56) — *worse* than row 24, MTP tensors confirmed real | — | 8.82/12.28GB | 270MiB swap touched (minor) | not re-evaluated (already confirmed coherent at row 24) |
+| 26 | 27B EfficientThink Q2-LynnStyle + **DFlash2 draft** (`--model-draft` dflash2-Q8_0, **community fine-tune**) | nerkyor/Qwen3.8-27B-EfficientThink-...-DFlash2-GGUF | 10975 | `draft-dflash`, n_max=2 (real dflash tensors, `common_speculative_impl_draft_dflash` init clean, no missing-tensor warnings) | 3 / 131072 | **3.97 ± 0.82** (n=5: 3.02/3.80/4.39/4.64/4.00) | — | 11.52/12.28GB | 16-17/23GB, swap flat at 236MiB (pre-existing baseline, no growth) | coherent decorator-stacking code sample, on-topic |
+| 27 | 27B EfficientThink Q2-LynnStyle, **no draft** (`--spec-type ngram-simple`, **community fine-tune**) | nerkyor/Qwen3.8-27B-EfficientThink-...-DFlash2-GGUF | 10975 | ngram-simple (no separate draft model needed) | 3 / 131072 | **3.81 ± 0.03** (n=5: 3.82/3.82/3.82/3.79/3.82, tightest spread on record) | — | 9.77/12.28GB | 14-15/23GB, swap flat at 233-240MiB | not re-evaluated (already confirmed coherent at row 26) |
 
 **Model-card check:** unsloth's own guide (`unsloth/Qwen3.6-35B-A3B-MTP-GGUF/README.md`)
 recommends exactly `--spec-draft-n-max 2` — matches our empirical optimum (row 3 vs 4/5).
@@ -292,7 +301,7 @@ speed grounds alone: Qwen 35B A3B+MTP remains the safest default; gpt-oss-20b re
 credible second profile pending its still-open tool-call round-trip check; Devstral and
 the 27B stay ruled out.
 
-## Round 6: 9B dense sanity check, and killing the memory-bandwidth hypothesis for the 27B
+## Round 6: 9B dense sanity check, killing the memory-bandwidth hypothesis, and closing out Q4_K_XL/dflash/ngram
 
 **9B dense model** (`Qwopus3.5-9B-v3.Q4_K_M.gguf`, pre-existing on disk, no MTP, `--parallel 3`
 / `--ctx-size 393216`, otherwise the same common flags): **44-48 tok/s (5 samples: 44.03, 43.71,
@@ -330,29 +339,129 @@ pursued further within this round's time budget. Flagging this as **not conclusi
 worth a quick empirical check (does the server refuse to start, or silently no-op?) in a future
 round rather than assumed.
 
-**Q4_K_XL/Q3_K_XL 27B and ngram-simple — not completed this round.** Downloads for both K-quants
-(16.35GB + 12.24GB) were started but repeatedly died mid-transfer when the initiating SSH
-session closed (background `curl` jobs need `setsid`, not just `&`, to survive that reliably —
-worth remembering for future rounds); by the time they were reliably resumed, continuing would
-have meant an open-ended wait disproportionate to a single work session. Downloads were
-cancelled and partial files removed rather than left half-downloaded. Given IQ3_S already showed
-that *smaller* quants don't help (compute-bound, not memory-bound) and IQ4_XS (row 12, 5.4 tok/s)
-remains the best clean 27B number, there's no strong reason to expect Q4_K_XL/Q3_K_XL (larger
-than IQ4_XS) would beat it — but this is an inference from the established pattern, not a
-measurement, and remains open for a future round. ngram-simple speculative decoding on the 27B
-or Devstral was not attempted at all this round (Devstral's model file had already been cleaned
-up from disk per budget discipline, and time ran out before circling back with a fresh
-download) — still genuinely untested, not ruled out.
+**Q4_K_XL/Q3_K_XL 27B and ngram-simple.** Downloads for both K-quants (16.35GB + 12.24GB) initially
+died mid-transfer when the initiating SSH session closed (background `curl` jobs need `setsid`,
+not just `&`, to survive that reliably — worth remembering for future rounds); once resumed
+reliably, Q4_K_XL and ngram-simple were completed within this same round (see results directly
+below). Q3_K_XL was deferred at the time (see Round 7 for its later completion).
 
-## Round 6: Q4_K_XL for 27B, ngram-simple, and draft-dflash tensor check
-
-Closing out the remaining queue items. Base image/build/common flags unchanged from prior rounds; `--parallel 3`, `--ctx-size 393216` (131072/slot) throughout.
+Closing out the remaining queue items from this round: Q4_K_XL for 27B, ngram-simple, and the
+draft-dflash tensor check. Base image/build/common flags unchanged from prior rounds; `--parallel 3`,
+`--ctx-size 393216` (131072/slot) throughout.
 
 - **27B dense Q4_K_XL** (`unsloth/Qwen3.8-27B-GGUF`, 17.5GB), no spec decoding: **3.59 ± 0.09 tok/s** (n=5: 3.64/3.58/3.57/3.58/3.55) — *worse* than IQ4_XS's 4.1, confirming (again) that a bigger K-quant doesn't help a compute-bound dense model; if anything it adds RAM pressure for no benefit.
-- **27B dense Q4_K_XL + MTP** (`--spec-type draft-mtp --spec-draft-n-max 2`): MTP head initializes cleanly (`creating MTP draft context`, no missing tensors) but the run is **swap-contaminated** (1.1GB swap in use, RAM at 22/23GB) — **5.84 ± 0.6 tok/s** (n=5: 6.33/6.19/5.16/5.7/5.81) is not a clean number, consistent with but not better than the already-adopted IQ4_XS+MTP result (row 12, 5.4 tok/s, verified swap-free). Q3_K_XL was not tested this round (time budget, and the pattern above makes a meaningfully different result unlikely) — noted as not completed rather than assumed.
+- **27B dense Q4_K_XL + MTP** (`--spec-type draft-mtp --spec-draft-n-max 2`): MTP head initializes cleanly (`creating MTP draft context`, no missing tensors) but the run is **swap-contaminated** (1.1GB swap in use, RAM at 22/23GB) — **5.84 ± 0.6 tok/s** (n=5: 6.33/6.19/5.16/5.7/5.81) is not a clean number, consistent with but not better than the already-adopted IQ4_XS+MTP result (row 12, 5.4 tok/s, verified swap-free). A swap-free re-verification was not obtained this round; Q3_K_XL was deferred to Round 7 (rows 20-21), where it came back clean and swap-free at 4.03/3.97 tok/s — well below this contaminated 5.84 figure, so the swap contamination here is very likely inflating this number rather than reflecting real throughput. Treat row "27B dense Q4_K_XL + MTP" above as unverified, same caution as row 6/30.2.
 - **`--spec-type draft-dflash` on the 27B**: loads without error, but logs show the model's `blk.64.nextn.*` tensors (the MTP/"nextn" head) being marked `unused ... ignoring` — dflash expects a different tensor structure than MTP's nextn layer, which this GGUF doesn't have. No draft-context init log line appears (unlike the clean `creating MTP draft context` seen with `draft-mtp`), and speed matches the no-spec baseline (3.15 tok/s, same ballpark as 3.59) — **conclusively a silent no-op on this model**, not a crash, not a working alternative. "Dflash 2" is very likely `--spec-type draft-dflash` (confirmed to exist in this build alongside `draft-eagle3`, `draft-dspark`, `ngram-simple`, `ngram-map`), but no publicly available 27B GGUF carries the tensors it needs.
 - **`--spec-type ngram-simple` on the 27B Q4_K_XL**: loads cleanly, **3.6 ± 0.04 tok/s** (n=3: 3.6/3.6/3.68) — indistinguishable from the no-spec baseline. Ngram-based speculation relies on the prompt/response containing repeated token sequences to draft from; a from-scratch code-generation prompt doesn't offer much of that, so there's nothing for it to exploit here. Not tested on Devstral this round (time budget).
 - **Conclusion**: none of these three items change the "27B: closed" verdict (§8) — if anything they reinforce it from new angles (bigger quant hurts, dflash tensors don't exist for this model, ngram speculation has nothing to draft from on fresh code-gen prompts). The one lever still genuinely untried is external draft-model speculative decoding (`-md` with a small separate Qwen model as drafter) and Devstral+ngram-simple.
+
+## Round 7: remaining 27B quants (IQ2_S, Q3_K_XL) and a community fine-tune (HauhauCS)
+
+Closes out the last open 27B quant questions from Round 6, plus an ad-hoc check of a
+community-repackaged 27B fine-tune whose repo name happened to include "MTP". All MTP runs
+this round use **`--spec-type draft-mtp --spec-draft-n-max 2`** specifically (the now-standing
+canonical n-max value for every MTP measurement going forward — n=2 was already this session's
+default per row 3/12, so no methodology change was needed, just confirmation). `--parallel 3` /
+`--ctx-size 393216` (131072/slot) throughout, same common flags as every prior round.
+
+- **IQ2_S** (row 19): **5.26 ± 0.45 tok/s**, no MTP variant possible — this specific unsloth
+  GGUF simply doesn't carry MTP/nextn tensors (clean `context type MTP requested but model
+  doesn't contain MTP layers` error, not a hang or crash). Interesting *because* it's the
+  fastest 27B number on record without MTP, ahead of IQ4_XS (row 11, 4.1) and IQ3_S (row 18
+  section, 4.29) — the very aggressive 2-bit quant appears to reduce compute enough to matter
+  here, unlike the IQ3_S/IQ4_XS/Q3_K_XL/Q4_K_XL cluster that all landed in the same
+  ~4 tok/s band regardless of size. Still far below the 35B A3B's 42 tok/s and not remotely
+  competitive on quality grounds expected from 2-bit quantization (not evaluated for quality
+  this round — ruled out on the "no MTP support" constraint alone, since MTP is a hard
+  requirement for this profile).
+- **Q3_K_XL** (rows 20-21): **4.03 ± 0.13 tok/s (MTP off) / 3.97 ± 0.14 tok/s (MTP on, n=2)** —
+  both clean, swap-free measurements (VRAM 9.75GB/8.65GB, RAM swap flat or only minimally
+  touched). MTP makes no measurable difference (within noise, actually very slightly worse),
+  matching the compute-bound pattern established in Round 6 for IQ3_S. This is also the clean,
+  swap-free number the Round 6 Q4_K_XL+MTP result (5.84 tok/s) should be compared against —
+  since Q3_K_XL undercuts it by ~30%, the Q4_K_XL+MTP figure is very likely swap-inflated, not
+  a genuine best-in-class 27B result.
+- **HauhauCS-Aggressive** (rows 22-25): a community fine-tune/abliteration merge from
+  `HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF`, flagged in earlier rounds as
+  "found but not tried, not a vetted quantizer conversion." Tested here on explicit request.
+  Unlike IQ2_S, **both quants of this repo genuinely carry MTP/nextn tensors** — clean
+  `creating MTP draft context` init on both Q2_K_P and IQ2_M, no missing-tensor errors. Speed:
+  Q2_K_P 4.17 (off) / 3.31 (on, n=2); IQ2_M 4.40 (off) / 3.45 (on, n=2) — MTP is *worse* than
+  off on both, same compute-bound story as every other 27B quant tested. IQ2_M's no-MTP number
+  (4.40 ± 0.02) is the tightest-spread 27B result on record, and both quants produced coherent,
+  on-topic output on the reverse-string sanity check (not a full quality pass). **This is a
+  fine-tune/abliteration of the base model, not an official unsloth quantization** — its speed
+  profile matches the base model closely (as expected, quantization/fine-tuning doesn't change
+  active-param count), so it doesn't change the "27B: closed" verdict, but it's now an actual
+  data point instead of an unexplored repo name.
+- **Conclusion**: no 27B config or quant found this round beats the already-adopted 35B A3B
+  champion, and none changes the compute-bound diagnosis from Round 6. IQ2_S is the fastest
+  27B-without-MTP number on record but can't run MTP at all with this file; Q3_K_XL confirms
+  (again, cleanly) that MTP doesn't help this dense model; HauhauCS's community MTP tensors
+  work exactly like the base model's — real, but not a game-changer. The "27B: closed"
+  verdict stands.
+
+## Round 8: real DFlash2 tensors (nerkyor 27B fine-tune) vs ngram-simple; Ornith-1.5-35B-A3B-DFlash2 ruled out (wrong format)
+
+User-authorized final phase, testing two specific community repos linked directly in chat.
+
+**`jzinno/Ornith-1.5-35B-A3B-DFlash2` — ruled out before download, incompatible format.**
+Checked via the HF API (`GET /api/models/jzinno/Ornith-1.5-35B-A3B-DFlash2`) before spending any
+bandwidth: `library_name: sglang`, `architectures: ["DFlash2DraftModel"]`, and the file list is
+`model.safetensors` (BF16, ~526M params) + `config.json`/`manifest.json` — **no `.gguf` file
+anywhere in the repo**. This is a draft model built for the **sglang** runtime, not llama.cpp.
+The deployed image (`ghcr.io/ggml-org/llama.cpp:full-cuda`) only loads GGUF files, so this repo
+cannot be benchmarked on this stack without an out-of-scope safetensors→GGUF conversion (which
+would also need llama.cpp to support whatever custom `DFlash2DraftModel` architecture this is,
+which it does not). No download, no benchmark — documented here as checked-and-incompatible,
+not silently skipped.
+
+**`nerkyor/Qwen3.8-27B-EfficientThink-...-DFlash2-GGUF` (Q2-LynnStyle tier) — real DFlash2
+tensors, genuinely tested.** This is a community fine-tune/quant repo (base: the same
+Qwen3.8-27B lineage as the other 27B rows in this doc; card branding includes "EfficientThink"
+and "Uncensored", multi-source SFT/SimPO lineage per the repo name) that separately publishes
+its own DFlash2 draft GGUF (`dflash2-qwen38-27b-Q8_0.gguf`, 2.06GB) alongside the ~13GB main
+model, plus separate optional MTP draft files. The repo's own `manifest.json` states explicitly:
+*"Choose either Q8_0 or Q4_K_M DFlash2 with llama.cpp `--model-draft` and `--spec-type
+draft-dflash`; never pass both and never use `draft-mtp`."* — i.e. **dflash and MTP are
+mutually exclusive by the file's own design**, and `--spec-type` on this llama.cpp build
+(confirmed via `--help`) is a single-choice flag (`none,draft-simple,draft-eagle3,draft-mtp,
+draft-dflash,draft-dspark,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache`) — **it
+is structurally impossible to stack two `--spec-type` strategies simultaneously on this build**,
+so the "combined" test the user asked to attempt if possible was not attemptable: not a build
+limitation specific to this model, but a hard single-selector constraint in llama.cpp's CLI
+itself. dflash-alone and ngram-alone were each tested in full instead.
+
+- Both downloaded files verified byte-exact against the manifest's published SHA256 (main GGUF
+  `8a84f7ef...d21922`, dflash2 Q8_0 draft `1086ea5d...1335a`) — genuine, unmodified download.
+- **DFlash2** (`--model-draft dflash2-qwen38-27b-Q8_0.gguf --spec-type draft-dflash
+  --spec-draft-n-max 2`, row 26): loads with a clean, real
+  `common_speculative_impl_draft_dflash: adding speculative implementation 'draft-dflash'`
+  init (`n_max=2, n_min=0, p_min=0.00, block_size=8, ...`) — this is a genuinely working
+  dflash implementation, unlike Round 6's silent no-op on the unsloth base GGUF (which had no
+  dflash tensors at all). **3.97 ± 0.82 tok/s** (n=5: 3.02/3.80/4.39/4.64/4.00 — noisier than
+  most 27B rows, no obvious cause, possibly draft-acceptance-rate variance run to run). VRAM
+  ran tight (11.52/12.28GB, both main + draft loaded) but stable; RAM swap flat at 236MiB
+  throughout (pre-existing baseline level seen across every clean run this session, no growth
+  — confirmed swap-free via 5s-interval `free -h` polling).
+- **ngram-simple** (`--spec-type ngram-simple`, no separate draft model, row 27): loads clean,
+  **3.81 ± 0.03 tok/s** (n=5: 3.82/3.82/3.82/3.79/3.82) — the tightest spread of any 27B run in
+  this document, essentially indistinguishable from the dflash mean (3.97) and from the
+  no-spec 27B baseline band (~3.6-4.4) established since Round 6. Swap flat at 233-240MiB, VRAM
+  much lower than dflash (9.77GB, no second model loaded).
+- **Quality sanity check**: a decorator-stacking prompt against the dflash config produced
+  coherent, on-topic, syntactically correct Python (not a full capability eval, same bar as
+  prior community-fine-tune rows).
+- **Conclusion**: DFlash2 is real on this repo (confirmed via clean draft-context init logs,
+  not a silent no-op like the base-model dflash test in Round 6) but delivers **no measurable
+  speedup** over ngram-simple or the established no-spec 27B baseline — both land in the same
+  ~3.8-4.0 tok/s compute-bound band as every other 27B config tested since Round 6, and dflash
+  costs meaningfully more VRAM (11.52 vs 9.77GB) for the same throughput. This is the same
+  compute-bound story repeated a fourth way: neither MTP (Rounds 6-7), nor ngram (Round 6-8),
+  nor now a genuinely-working DFlash2 draft model change the fundamental 27B-dense-on-12GB
+  bottleneck. The "27B: closed" verdict stands; DFlash2 does not reopen it. Ornith-1.5-35B is
+  not a substitute data point for the 35B A3B+MTP champion — it was never benchmarked, ruled
+  out purely on format incompatibility before any GPU time was spent on it.
 
 ## Recommendation for `test-35b-mtp-improvements`
 
@@ -369,13 +478,20 @@ Compose flag changes needed in `docker-compose-gpu-qwen-35b-a3b-mtp.yml`:
 **IQ quants ruled out** (row 10): IQ4_NL+MTP is slower than Q4_K_XL+MTP (37.4 vs 42.0 tok/s)
 despite being smaller — no reason to switch.
 
-**27B+MTP still not recommended as the default**, but the picture is clearer now: the
-previously-reported +92%/30.2-tok/s baseline (row 6) is itself suspect (likely the same
-env-var mislabeling bug that hit rows 4/5), and the only *clean, swap-verified* 27B numbers
-this round are IQ4_XS at 4.1 tok/s (no MTP) vs 5.4 tok/s (MTP on, +28%, swap-free) — both far
-below the 35B A3B's 42 tok/s. A 27B *dense* model on 12GB VRAM / 23GB RAM is simply
-CPU/RAM-bound regardless of MTP. Worth retrying if the WSL memory ceiling gets raised (see
-above), but not before.
+**27B+MTP still not recommended as the default**, and Round 7 closes out the remaining open
+quant questions on this point. The previously-reported +92%/30.2-tok/s baseline (row 6) is
+itself suspect (likely the same env-var mislabeling bug that hit rows 4/5); the Round 6
+Q4_K_XL+MTP figure (5.84 tok/s) is now also suspect, since it was swap-contaminated and the
+clean, swap-free Round 7 Q3_K_XL+MTP number (3.97 tok/s, rows 20-21) came in ~30% lower under
+otherwise comparable conditions. Across every quant now tested clean and swap-free — IQ4_XS
+(4.1/5.4), IQ3_S (4.29/3.97), Q3_K_XL (4.03/3.97), and the HauhauCS community fine-tune
+(4.17-4.40 off / 3.31-3.45 on) — MTP gives at best a small, inconsistent gain (IQ4_XS) and at
+worst makes things slightly worse (every other quant), all far below the 35B A3B's 42 tok/s.
+IQ2_S is the one outlier worth noting: 5.26 tok/s without any MTP support at all, the fastest
+27B-without-MTP number on record, but not enough on its own to reopen the 27B question given
+the 2-bit quality tradeoff and the lack of an MTP path for this file. A 27B *dense* model on
+12GB VRAM / 23GB RAM is simply CPU/RAM-bound regardless of MTP or quant choice. Worth retrying
+if the WSL memory ceiling gets raised (see above), but not before.
 
 **DeepSeek/MiniMax ruled out** for this use case — see dedicated section above.
 

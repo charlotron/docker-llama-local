@@ -50,15 +50,25 @@ services:
 
       # --- Prompt & Chat Templates ---
       - "--jinja"
+      # reasoning_effort=high is OpenAI's own official lever for reliability on this
+      # model (not temperature -- gpt-oss has no documented "coding preset" for
+      # temp/top_p). High effort spends more of the harmony reasoning channel before
+      # answering, at the cost of more tokens/time -- see the --predict note below.
+      - "--chat-template-kwargs"
+      - '{"reasoning_effort": "high"}'
 
       # --- VRAM & Memory Allocation ---
       - "--fit-target"
       - "1536"
 
       # --- Context & Attention Options ---
-      # Same 393216 / 3 = 131072 (128K) per-slot split as the other profiles.
+      # NOTE: gpt-oss-20b's native context window is 131072 (128K) -- unlike the Qwen
+      # profiles (natively up to 262144), going past that degrades quality rather than
+      # extending it usefully. So this is deliberately 262144 (not the Qwen profiles'
+      # 393216): 262144 / 2 parallel slots = 131072 per slot, exactly at the model's
+      # native ceiling, not beyond it.
       - "--ctx-size"
-      - "393216"
+      - "262144"
       # Higher than the other profiles on purpose: gpt-oss's harmony reasoning
       # channel consumes a chunk of the token budget before the visible
       # answer starts. 32768 gave truncated/empty answers in testing at lower
@@ -70,8 +80,9 @@ services:
       - "--context-shift"
 
       # --- Concurrency & Cache Optimization ---
+      # 393216 / 2 = 196608 (192K) per slot -- fewer concurrent slots, more context each.
       - "--parallel"
-      - "3"
+      - "2"
       - "--cache-type-k"
       - "q4_0"
       - "--cache-type-v"
@@ -95,14 +106,17 @@ services:
       - "${LLAMA_CPU_THREADS:-14}"
 
       # --- Sampling & Anti-Loop Parameters ---
+      # temp=1.0/top_p=1.0 is OpenAI's own official recommendation for gpt-oss (not a
+      # Qwen-style tuned-down setting) -- top_k/min_p left effectively disabled (0) since
+      # OpenAI's guidance doesn't constrain them. Source: github.com/openai/gpt-oss.
       - "--temp"
-      - "0.6"
+      - "1.0"
       - "--top-p"
-      - "0.95"
+      - "1.0"
       - "--top-k"
-      - "20"
+      - "0"
       - "--min-p"
-      - "0.05"
+      - "0"
       - "--presence-penalty"
       - "0.2"
       - "--repeat-penalty"

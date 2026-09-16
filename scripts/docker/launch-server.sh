@@ -180,7 +180,7 @@ print_header "DOCKER DEPLOYMENT"
 print_step "Restarting services"
 
 # Stop active containers first to avoid conflicts
-docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b llama-cpp-gpu-gpt-oss-20b > /dev/null 2>&1
+docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b-mtp llama-cpp-gpu-qwen-27b-uncensored llama-cpp-gpu-gpt-oss-20b > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d
 

@@ -2,7 +2,7 @@
 
 This document summarizes the benchmarking work behind the three GPU profiles shipped in
 `docker/`, and points to the full raw evidence in [`BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md)
-at the repo root (six rounds, 18+ speed configurations, a code-quality shootout).
+at the repo root (eight rounds, 27+ speed configurations, a code-quality shootout).
 
 Host used for all measurements: **gpu-host**, RTX 4070 SUPER (12GB VRAM), WSL2 with a
 23GB RAM ceiling (set in `.wslconfig`, not the physical host's real capacity — see
@@ -42,6 +42,12 @@ is traceable too.
 | Qwen 27B | dense | IQ3_S | on/off | 3.97–4.29 tok/s | Smaller quant, still slow even mostly in VRAM — proved the 27B is compute-bound, not memory-bound |
 | Qwen 27B | dense | IQ4_XS | `draft-dflash` | 3.15 tok/s (no-op) | This GGUF has no dflash tensors — silent no-op, not a working alternative to MTP |
 | Qwen 27B | dense | IQ4_XS | `ngram-simple` | 3.6 tok/s (no gain) | No repeated token sequences in a from-scratch code prompt for ngram matching to exploit |
+| Qwen 27B | dense | IQ2_S | n/a | 5.26 tok/s | Fastest 27B-without-MTP number on record, but this GGUF has **no MTP/nextn tensors at all** — clean error on `--spec-type draft-mtp`, so it can't meet the profile's MTP requirement |
+| Qwen 27B | dense | Q3_K_XL | on/off | 3.97–4.03 tok/s | Same compute-bound ceiling as every other 27B quant; MTP gives no gain (slightly worse) — also the clean baseline that exposed row above's Q4_K_XL+MTP 5.84 tok/s as likely swap-inflated |
+| Qwen 27B (**community fine-tune**, HauhauCS-Aggressive) | dense | Q2_K_P / IQ2_M | on/off | 3.31–4.40 tok/s | Real MTP tensors confirmed present (unlike IQ2_S), but same compute-bound pattern — MTP is worse than off on both quants; not an official unsloth quantization, kept separate from the base-model line |
+| Qwen 27B (**community fine-tune**, nerkyor EfficientThink Q2-LynnStyle) | dense | Q2-LynnStyle | `draft-dflash` (real DFlash2 draft GGUF, n-max 2) | 3.97 ± 0.82 tok/s | Genuine, working DFlash2 tensors (unlike the earlier no-op) but no speedup over ngram/no-spec baseline, and 11.52GB VRAM (vs 9.77GB) for the same throughput |
+| Qwen 27B (same repo/quant) | dense | Q2-LynnStyle | `ngram-simple` | 3.81 ± 0.03 tok/s | Same compute-bound ceiling as every other 27B config; tightest-spread 27B result on record but not a speed win |
+| Ornith-1.5-35B-A3B-DFlash2 | MoE draft model | — | n/a | not tested | **Wrong format for this stack**: `sglang`-only safetensors `DFlash2DraftModel`, no `.gguf` anywhere in the repo — llama.cpp cannot load it, ruled out before download |
 | DeepSeek-Coder-V2-Lite-Instruct | MoE, 2.4B active | Q4_K_M | n/a | 23.8 tok/s | Fast, but **no tool-calling support** in its chat template — disqualifying for the agentic use case regardless of speed |
 | Devstral-Small-2507 | dense, 24B | Q4_K_XL | n/a | 4.34 tok/s | Too slow (dense forward-pass cost); also found to have a **real functional bug** — TTL is entirely unimplemented in generated code despite being an explicit requirement |
 | GLM-4.5-Air | MoE, 106B total | IQ4_XS | n/a | not tested | Doesn't fit — first shard alone is ~50GB, total >60GB |
@@ -75,8 +81,15 @@ Full transcripts and line-level bug descriptions are in `BENCHMARK_RESULTS.md`, 
   replacement — validate tool-calling for your specific agent workflow before relying on it.
 - **27B + external draft-model speculative decoding**: the one lever not yet tried for the
   27B (a small separate Qwen model as an `-md` drafter, a different mechanism from MTP).
-  Every other lever (bigger/smaller quant, MTP, dflash, ngram) has been tried and tops out
-  around 5–6 tok/s.
+  Every other lever tried — bigger/smaller quant (Q5_K_M down to IQ2_S), MTP, dflash (both
+  the earlier no-op and a genuinely working DFlash2 draft in Round 8), ngram, and two
+  community fine-tunes with real MTP/DFlash2 tensors — tops out around 4–6 tok/s, and the
+  best *clean* number remains IQ4_XS+MTP at 5.4 tok/s.
+- **Stacking `--spec-type` strategies (e.g. dflash + ngram together)**: confirmed
+  structurally impossible on this llama.cpp build — `--spec-type` is a single-choice flag
+  (`none,draft-simple,draft-eagle3,draft-mtp,draft-dflash,draft-dspark,ngram-simple,
+  ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache`), not a stackable set. Not a
+  model-specific limitation; ruled out generally in Round 8.
 - **Raising the WSL memory ceiling**: `.wslconfig` currently caps WSL at 24GB; the
   physical host may have more. Raising it and re-testing the 27B is a candidate for a
   future round if dense-model throughput becomes a priority.

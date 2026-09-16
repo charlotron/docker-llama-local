@@ -1,0 +1,121 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA), QWEN 27B HAUHAUCS-AGGRESSIVE (UNCENSORED)
+# =================================================================
+# Alternate profile: a community "uncensored" fine-tune of the dense 27B model
+# (HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF), not the official
+# unsloth base line. Best verified quant on this hardware (RTX 4070 SUPER 12GB /
+# 23GB WSL RAM): IQ2_M -- 4.40 tok/s, swap-free. See BENCHMARK_RESULTS.md
+# "Round 7" and docs/BENCHMARKS.md for full evidence.
+#
+# IMPORTANT: unlike the official 27B profile (docker-compose-gpu-qwen-27b-mtp.yml),
+# MTP makes THIS fine-tune slower, not faster (IQ2_M: 4.40 tok/s off vs 3.45 tok/s
+# on). MTP tensors are real in this GGUF (confirmed via logs), it's just not a net
+# win here -- so this profile deliberately does NOT enable --spec-type draft-mtp.
+# Do not "turn MTP on" expecting a speedup on this specific fine-tune.
+#
+# This is a third-party community fine-tune with only a basic coherence sanity
+# check performed (not the deeper code-quality shootout given to the main
+# candidates) -- treat output quality with more caution than the other profiles.
+
+name: docker-llama-gpu
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+
+    container_name: llama-cpp-gpu-qwen-27b-uncensored
+
+    # Restrict container memory usage to protect host system stability
+    mem_limit: 24g
+
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+
+    command:
+      # --- Basic Server Setup ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-HauhauCS-Aggressive-IQ2_M.gguf}"
+      - "--alias"
+      - "llama-local"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      - "--jinja"
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": true, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM & Memory Allocation ---
+      - "--fit-target"
+      - "1536"
+
+      # --- Context & Attention Options ---
+      # Same 393216 / 3 = 131072 (128K) per-slot split as the other GPU profiles.
+      - "--ctx-size"
+      - "393216"
+      # Raised from 32768 per Qwen's own guidance (up to 81920 for complex coding/
+      # math tasks) -- only a cap, not a forced length; still stops at EOS.
+      - "--predict"
+      - "81920"
+      - "--flash-attn"
+      - "on"
+      - "--context-shift"
+
+      # --- Concurrency & Cache Optimization ---
+      # 393216 / 2 = 196608 (192K) per slot -- fewer concurrent slots, more context each.
+      - "--parallel"
+      - "2"
+      - "--cache-type-k"
+      - "q4_0"
+      - "--cache-type-v"
+      - "q4_0"
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      - "--load-mode"
+      - "mlock"
+      - "--no-warmup"
+      # No --spec-type here on purpose: MTP tensors exist in this GGUF but
+      # measured SLOWER than off (3.45 vs 4.40 tok/s) -- see header note above.
+
+      # --- CPU Thread Tuning ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      # temp/top_p/top_k/min_p/presence_penalty/repeat_penalty follow Qwen3.6-27B's
+      # official "thinking mode for precise coding tasks" preset (preserve_thinking:
+      # true above), chosen for reliability over creativity per user request. Source:
+      # huggingface.co/Qwen/Qwen3.6-27B model card. Base model is Qwen3.8-27B, so the
+      # same guidance applies despite this being a community fine-tune.
+      - "--temp"
+      - "0.6"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0"
+      - "--presence-penalty"
+      - "0"
+      - "--repeat-penalty"
+      - "1.0"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped
