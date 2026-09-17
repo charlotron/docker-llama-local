@@ -91,8 +91,11 @@ services:
       - "2048"
 
       # --- Performance & Speed Optimization ---
+      # NOTE: "none", not "mlock" -- mlock hangs indefinitely (uninterruptible D-state
+      # disk wait) when the model sits on a slow/virtualized filesystem (e.g. a WSL2
+      # /mnt/<drive> 9p mount, ~15MB/s measured). See docs/VISION_MODEL_EVAL.md.
       - "--load-mode"
-      - "mlock"
+      - "none"
       - "--no-warmup"
       # No speculative decoding here: gpt-oss's architecture doesn't carry
       # MTP/dflash-style draft tensors in this llama.cpp build, and it

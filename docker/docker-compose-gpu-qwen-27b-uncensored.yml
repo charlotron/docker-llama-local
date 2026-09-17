@@ -79,8 +79,11 @@ services:
       - "2048"
 
       # --- Performance & Speed Optimization ---
+      # NOTE: "none", not "mlock" -- mlock hangs indefinitely (uninterruptible D-state
+      # disk wait) when the model sits on a slow/virtualized filesystem (e.g. a WSL2
+      # /mnt/<drive> 9p mount, ~15MB/s measured). See docs/VISION_MODEL_EVAL.md.
       - "--load-mode"
-      - "mlock"
+      - "none"
       - "--no-warmup"
       # No --spec-type here on purpose: MTP tensors exist in this GGUF but
       # measured SLOWER than off (3.45 vs 4.40 tok/s) -- see header note above.

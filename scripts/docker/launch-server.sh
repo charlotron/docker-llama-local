@@ -89,6 +89,15 @@ COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml"}
 # wrong container name and falsely report "Container stopped unexpectedly"
 # even when the real container was running and healthy.
 MODEL_DIR="${MODELS_DIR:-./docker/data/models}"
+mkdir -p "$MODEL_DIR"
+# Resolve to an absolute path and export it as MODELS_DIR so the compose
+# file's volume mount sees the same directory we just downloaded into.
+# Compose resolves a relative ${MODELS_DIR} against the directory of the
+# compose file itself (e.g. docker/), not the repo root this script cd'd
+# into -- left relative, "./docker/data/models" doubles up into
+# docker/docker/data/models and the container can't find the model.
+MODEL_DIR="$(cd "$MODEL_DIR" && pwd)"
+export MODELS_DIR="$MODEL_DIR"
 if [ -f "$COMPOSE_FILE" ]; then
     CONTAINER_NAME=$(grep -m1 'container_name:' "$COMPOSE_FILE" | sed 's/.*container_name:[[:space:]]*//')
 fi

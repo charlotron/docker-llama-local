@@ -1,0 +1,82 @@
+# AGENTS.md
+
+Operational notes for anyone (human or agent) launching profiles in this repo.
+Read this before running `scripts/docker/launch-server.sh` against a real host.
+
+## Profile files: what's tracked vs. what's real
+
+- **`.env.gpu.<profile>.sample`** (tracked in git): a template for one profile.
+  Carries the model-specific settings (`COMPOSE_FILE`, `HF_REPO`, `HF_FILE`,
+  `LLAMA_CONTEXT_SIZE`, ...) with `MODELS_DIR=""` left blank on purpose. **Never
+  edit these** — they are the reference config for each profile and must stay
+  generic/host-agnostic.
+- **`.env` / `.env.gpu.<profile>`** (real files, gitignored, host-specific): what
+  you actually launch with. Carries your machine's own settings —
+  `MODELS_DIR`, `LLAMA_HOST`, `LLAMA_PORT`, `LLAMA_CPU_THREADS` — plus the
+  model-specific block copied over from the `.sample` you want to run.
+
+`launch-server.sh` defaults to `.env` when called with no argument, or loads
+whatever file you pass as the first argument.
+
+## Switching profiles — two supported patterns
+
+**Pattern A — one `.env`, edited per switch.** Keep your machine's own
+settings in `.env` (`MODELS_DIR`, host, port, threads) and, each time you
+want a different model, copy the model-specific block from the target
+`.sample` into `.env`, replacing the previous model's block. Launch with no
+argument:
+```
+./scripts/docker/launch-server.sh
+```
+
+**Pattern B — one real `.env.gpu.<profile>` file per profile (recommended if
+you switch often).** Create a real, non-`.sample` file for each profile you
+use regularly, by copying the corresponding `.sample` and filling in your
+machine's `MODELS_DIR`/host/port/threads once:
+```
+cp .env.gpu.qwen-27b-mtp.sample .env.gpu.qwen-27b-mtp
+# edit .env.gpu.qwen-27b-mtp: set MODELS_DIR to your real model directory
+```
+Then launch any profile directly, no editing required per switch:
+```
+./scripts/docker/launch-server.sh .env.gpu.qwen-27b-mtp
+./scripts/docker/launch-server.sh .env.gpu.qwen-35b-a3b-mtp
+```
+These per-profile real files are gitignored (`.env.*` except `*.sample` — see
+`.gitignore`) — safe to keep host-specific paths in them, they will never be
+committed.
+
+**In both patterns, the `.sample` files themselves are never touched.** They
+exist to be copied from, not launched directly or edited in place — launching
+a `.sample` as-is runs with `MODELS_DIR=""`, which falls back to
+`./docker/data/models` relative to the repo root and can silently resolve to
+the wrong path depending on how Docker Compose resolves relative volume
+paths (see Known gotchas below).
+
+## Known gotchas
+
+- **`MODELS_DIR=""` + Docker Compose relative-path resolution.** Compose
+  resolves a relative `${MODELS_DIR}` volume path against the *compose
+  file's own directory* (`docker/`), not the repo root `launch-server.sh` cds
+  into. Left blank, `./docker/data/models` can double up into
+  `docker/docker/data/models` and the container fails with "No such file or
+  directory" even though the model downloaded successfully. `launch-server.sh`
+  now exports `MODELS_DIR` as an absolute path internally to avoid this, but
+  always set a real `MODELS_DIR` in your own `.env*` rather than relying on
+  the blank default.
+- **`--load-mode mlock` hangs indefinitely on a slow/virtualized filesystem.**
+  If your model directory sits on a WSL2 `/mnt/<drive>` 9p bind mount (or any
+  slow network/virtualized storage), `mlock` can hang in an uninterruptible
+  disk wait with zero progress and no error — it looks like a crashed load,
+  not a slow one. All GPU compose files in this repo use `--load-mode none`
+  for this reason. Keep model files on native local disk (e.g.
+  `/home/<user>/data/llama-models`) regardless — even `none` loads much
+  faster there. See `docs/VISION_MODEL_EVAL.md` for the original diagnosis.
+- **Port already in use / "not available" errors from Docker on Windows/WSL2
+  hosts.** After a host sleep/resume, Windows can reserve the default port
+  (12345) in its Hyper-V dynamic port exclusion range, which surfaces inside
+  WSL2 as a permissions error on bind, not a normal "port in use" message.
+  Fix from an elevated Windows PowerShell: `net stop winnat && net start
+  winnat`. If you can't do that (e.g. launching over SSH without admin
+  access), just pick a free port instead — set `LLAMA_PORT` to something else
+  (e.g. 18444) in the `.env*` you're launching with.

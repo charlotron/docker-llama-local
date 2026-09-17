@@ -3,7 +3,11 @@
 **/logs/
 
 # Entorno y secretos
+# Any real .env* file is host-specific (MODELS_DIR, ports, etc.) and must never be
+# committed -- only the .sample templates are tracked.
 .env
+.env.*
+!.env.*.sample
 *.log
 
 # Docker
