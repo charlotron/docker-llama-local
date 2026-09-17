@@ -81,4 +81,15 @@ paths (see Known gotchas below).
   Fix from an elevated Windows PowerShell: `net stop winnat && net start
   winnat`. If you can't do that (e.g. launching over SSH without admin
   access), just pick a free port instead — set `LLAMA_PORT` to something else
-  (e.g. 18444) in the `.env*` you're launching with.
+  (e.g. 18444) in the `.env*` you're launching with. **Caveat:** restarting
+  `winnat` can itself leave WSL2 without IPv4/IPv6 internet access for a bit
+  (DNS resolves but every connection times out) — if that happens, run `wsl
+  --shutdown` from PowerShell (not admin) and reopen your WSL terminal to
+  fully reinitialize the virtual network adapter, then retry.
+- **A real `.env`/`.env.<profile>` can outlive a compose-file rename.** When a
+  compose file gets renamed in this repo (e.g. `docker-compose-gpu.yml` →
+  `docker-compose-gpu-qwen-35b-a3b-mtp.yml`), git tracks the rename fine, but
+  any host-specific real `.env*` file that hardcodes the old `COMPOSE_FILE=`
+  path is gitignored and won't get updated by a `git pull` — it'll fail with
+  "no such file or directory" the next time you launch. Check `COMPOSE_FILE`
+  in your real env files after pulling changes that touch `docker/*.yml`.
