@@ -65,13 +65,15 @@ paths (see Known gotchas below).
   always set a real `MODELS_DIR` in your own `.env*` rather than relying on
   the blank default.
 - **`--load-mode mlock` hangs indefinitely on a slow/virtualized filesystem.**
-  If your model directory sits on a WSL2 `/mnt/<drive>` 9p bind mount (or any
-  slow network/virtualized storage), `mlock` can hang in an uninterruptible
+  All GPU compose files use `--load-mode mlock` so the whole model is pinned
+  in RAM at load time (no lazy paging) — this requires `MODELS_DIR` to point
+  at native, fast local disk (e.g. `/home/<user>/data/llama-models`). If it
+  ever points at a WSL2 `/mnt/<drive>` 9p bind mount (or any slow
+  network/virtualized storage) instead, `mlock` hangs in an uninterruptible
   disk wait with zero progress and no error — it looks like a crashed load,
-  not a slow one. All GPU compose files in this repo use `--load-mode none`
-  for this reason. Keep model files on native local disk (e.g.
-  `/home/<user>/data/llama-models`) regardless — even `none` loads much
-  faster there. See `docs/VISION_MODEL_EVAL.md` for the original diagnosis.
+  not a slow one. If you're stuck on slow storage, switch that profile's
+  `--load-mode` to `none` instead of moving the model. See
+  `docs/VISION_MODEL_EVAL.md` for the original diagnosis.
 - **Port already in use / "not available" errors from Docker on Windows/WSL2
   hosts.** After a host sleep/resume, Windows can reserve the default port
   (12345) in its Hyper-V dynamic port exclusion range, which surfaces inside

@@ -119,11 +119,14 @@ services:
       - "2048"
 
       # --- Performance & Speed Optimization ---
-      # NOTE: "none", not "mlock" -- mlock hangs indefinitely (uninterruptible D-state
-      # disk wait) when the model sits on a slow/virtualized filesystem (e.g. a WSL2
-      # /mnt/<drive> 9p mount, ~15MB/s measured). See docs/VISION_MODEL_EVAL.md.
+      # NOTE: "mlock" pins the whole model in RAM at load time (no lazy paging), which
+      # requires the model directory to be on native, fast local disk. On a slow/
+      # virtualized filesystem (e.g. a WSL2 /mnt/<drive> 9p mount, ~15MB/s measured)
+      # mlock hangs indefinitely (uninterruptible D-state disk wait) instead of just
+      # loading slowly. If MODELS_DIR ever points at such a mount, switch this to
+      # "none" instead. See docs/VISION_MODEL_EVAL.md and AGENTS.md.
       - "--load-mode"
-      - "none"
+      - "mlock"
       - "--no-warmup"
       # Multi-Token Prediction speculative decoding. Verified swap-free at
       # --parallel 3 with the IQ4_XS quant above (smaller quant leaves enough
