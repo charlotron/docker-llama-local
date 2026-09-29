@@ -97,9 +97,24 @@ services:
       # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
       - "--cache-type-v"
       - "q4_0"
-      # Set system memory cache limit (in MB) for processing requests
+      # Host-RAM budget for cached prompt prefixes, so a request that shares a
+      # prefix with an earlier one skips the prefill instead of reprocessing it.
+      #
+      # 2048 was too small for agentic clients. Such a client issues several
+      # calls per user turn (the main turn plus auxiliary ones for titles and
+      # context compaction), each with a different large prefix. A 40-53k token
+      # conversation caches at ~1.8 GB, so only one entry fits in 2048 and the
+      # calls evict each other in ping-pong -- the server logs "making room for
+      # prompt cache entry, removing oldest entry" and every call reports
+      # cache_n = 0, paying a 15-60s prefill each time.
+      #
+      # 8192 holds roughly four such entries. Measured on this host: 24 GB total
+      # with the container at ~9.3 GB of a 23.5 GB limit, so the extra 6 GB fits
+      # without pushing the box toward the WSL2 ceiling. Do not raise this to
+      # 12288 here: available RAM would drop to ~3.6 GB, and this host has a
+      # history of wedging unrecoverably under memory pressure.
       - "--cache-ram"
-      - "2048"
+      - "8192"
 
       # --- Performance & Speed Optimization ---
       # Load the entire model directly into locked RAM/VRAM instead of mmap-ing it.
