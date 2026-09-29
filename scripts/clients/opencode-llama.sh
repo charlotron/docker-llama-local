@@ -148,7 +148,14 @@ const dynamicConfig = {
   'agents': { 'maxConcurrent': 1 },
   'provider': {
     'llama-local': {
-      'npm': '@ai-sdk/anthropic',
+      // Must be the OpenAI-compatible provider, not '@ai-sdk/anthropic'.
+      // The Anthropic provider talks to llama.cpp's /v1/messages endpoint,
+      // which drops most of the conversation once tool results accumulate:
+      // measured prompt size flatlined at ~1106 tokens no matter how many
+      // tool rounds were sent, while /v1/chat/completions grew linearly to
+      // 4680 for the same history. With the history gone the model forgets
+      // what it already did and ends the turn with a premature summary.
+      'npm': '@ai-sdk/openai-compatible',
       'name': 'Llama.cpp Local Server',
       'options': {
         'baseURL': 'http://' + process.env.LLAMA_HOST + ':' + process.env.LLAMA_PORT + '/v1',

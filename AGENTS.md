@@ -129,3 +129,35 @@ paths (see Known gotchas below).
   least ~24576 to be safe (16384 reasoning + 8192 answer). If your clients
   cannot go that high, lower `--reasoning-budget` to match them instead --
   a budget larger than the smallest client cap protects nobody.
+
+### The Anthropic `/v1/messages` endpoint loses conversation history
+
+llama.cpp exposes an Anthropic-compatible `/v1/messages` alongside the
+OpenAI-compatible `/v1/chat/completions`. The Anthropic one drops most of the
+conversation once `tool_result` blocks accumulate. Measured with the same
+history sent to both endpoints, growing one tool round at a time:
+
+| tool rounds | `/v1/messages` prompt | `/v1/chat/completions` prompt |
+|-------------|-----------------------|-------------------------------|
+| 0           | 17                    | 272                           |
+| 1           | 555                   | 823                           |
+| 2           | 555                   | 1374                          |
+| 4           | 1106                  | 2476                          |
+| 6           | 1106                  | 3578                          |
+| 8           | 1106                  | 4680                          |
+
+`/v1/messages` flatlines; `/v1/chat/completions` grows linearly. Single-shot
+requests look fine on both, so this only shows up in agentic sessions.
+
+The failure does not look like an error. The model simply stops seeing what it
+already did, so after a few tool rounds it ends the turn with a premature
+summary and the task is never finished. Stray tool-call closing tags can leak
+into the text as the parser desyncs.
+
+Clients must therefore target `/v1/chat/completions`. `opencode-llama.sh` uses
+the `@ai-sdk/openai-compatible` provider for this reason; do not switch it back
+to `@ai-sdk/anthropic`.
+
+Claude Code has no such option: it speaks the Anthropic API by design, so
+`claude-llama.sh` is exposed to this bug on long agentic runs. Prefer OpenCode
+for multi-step agentic work against this server until llama.cpp fixes it.
