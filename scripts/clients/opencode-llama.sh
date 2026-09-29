@@ -107,6 +107,19 @@ if (fs.existsSync(globalConfigPath)) {
   }
 }
 
+// Resolve the live model name from the server, falling back to the static
+// value only if the server cannot be reached.
+const MODEL_NAME = (() => {
+  try {
+    const r = require('child_process')
+      .execSync(`curl -s -m 5 http://${process.env.LLAMA_HOST}:${process.env.LLAMA_PORT}/props`,
+                { encoding: 'utf8' });
+    const p = JSON.parse(r).model_path;
+    if (p) return p.split('/').pop().replace(/\.gguf$/, '');
+  } catch (e) { /* server down: fall through */ }
+  return process.env.HF_FILE || 'llama-local';
+})();
+
 const dynamicConfig = {
   'model': 'llama-local/llama-local',
   'autoCompact': true,
@@ -127,7 +140,10 @@ const dynamicConfig = {
       },
       'models': {
         'llama-local': {
-          'name': process.env.HF_FILE || 'llama-local',
+          // Ask the server what it is actually serving. HF_FILE is only the
+          // download target and goes stale the moment a different profile is
+          // launched -- it showed a model that had been deleted from disk.
+          'name': MODEL_NAME,
           'limit': {
             'context': Number(process.env.LLAMA_CONTEXT_SIZE),
             'output': Number(process.env.LLAMA_OUTPUT_LIMIT)
@@ -170,7 +186,7 @@ trap 'rm -f "$OPENCODE_CONFIG"' EXIT SIGINT SIGTERM
 print_header "OPENCODE LOCAL CLIENT"
 print_info "Host " "http://$LLAMA_HOST:$LLAMA_PORT"
 print_info "Alias" "$MODEL"
-print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 

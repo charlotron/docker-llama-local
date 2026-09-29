@@ -69,7 +69,7 @@ export CLAUDE_CODE_ATTRIBUTION_HEADER=0
 print_header "CLAUDE CODE LOCAL"
 print_info "Host " "$ANTHROPIC_BASE_URL"
 print_info "Alias" "$ANTHROPIC_MODEL"
-print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 
