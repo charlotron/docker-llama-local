@@ -163,3 +163,21 @@ therefore permanently exposed to this bug. Its launcher was removed from this
 repo rather than left in place as a trap. Recover it with
 `git show f224847:scripts/clients/claude-llama.sh` if llama.cpp ever fixes the
 endpoint.
+
+### Vision needs an `mmproj`, and the MTP repo does not ship one
+
+`Qwen3.6-35B-A3B` is multimodal at the base, but the GGUF repo the default
+profile pulls from (`mudler/Qwen3.6-35B-A3B-APEX-MTP-GGUF`) contains the weights
+only. The vision tower is a separate `mmproj.gguf` that lives in the sibling
+repo `mudler/Qwen3.6-35B-A3B-APEX-GGUF` (861 MB).
+
+Without it the server starts happily and `/props` reports
+`"modalities": {"vision": false}`; an image request then fails with
+`500 image input is not supported - hint: ... you may need to provide the mmproj`.
+Clients report this as "the model has no vision capability", which is true of the
+files loaded but not of the model itself.
+
+The `apex-mini-vision` profile is `apex-mini` plus `--mmproj`. Measured cost:
+none (~95 tok/s and ~11.4 GB VRAM either way). `launch-server.sh` downloads the
+file automatically when `HF_MMPROJ_REPO` and `HF_MMPROJ_FILE` are set, and
+exports `TARGET_MMPROJ_FILE` for the compose file to pick up.

@@ -1,0 +1,219 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) - Qwen3.6-35B-A3B APEX-MTP-I-Mini + VISION
+# =================================================================
+name: docker-llama-gpu
+
+services:
+  # The main llama.cpp inference service
+  llama-cpp:
+    # Use the official high-performance CUDA-enabled llama.cpp docker image
+    # Requires a build with real --spec-type draft-mtp support (build >= 10975).
+    # Run `docker pull ghcr.io/ggml-org/llama.cpp:full-cuda` before first deploy to make
+    # sure you're not stuck on an older build where MTP flags are silently inert.
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    
+    # Custom name for the running container
+    container_name: llama-cpp-gpu
+    
+    # Restrict container memory usage to protect host system stability (recommended for large models)
+    mem_limit: 24g
+    
+    # Expose the configured llama-server port to the host machine
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+      
+    # Mount the local or external model directory into the container's /models folder
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+      
+    # Command-line flags passed directly to llama-server
+    command:
+      # --- Basic Server Setup ---
+      # Enable llama-server REST API mode (required for client agents)
+      - "--server"
+      # Specify the path of the target GGUF model file inside the container
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
+      # Set the model alias (used as the model name in completions calls)
+      - "--alias"
+      - "llama-local"
+      # Bind to 0.0.0.0 to accept requests from other devices in your network
+      - "--host"
+      - "0.0.0.0"
+      # The internal port that llama-server will listen on
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Vision ---
+      # This is the only difference from the text-only apex-mini profile.
+      # Qwen3.6-35B-A3B is multimodal at the base, but the MTP repo ships the
+      # weights alone, so /props reports "vision": false without this file. The
+      # mmproj comes from the sibling APEX repo (mudler/Qwen3.6-35B-A3B-APEX-GGUF,
+      # 861 MB) and enables both image and video input.
+      #
+      # Measured cost of adding it, same box, same prompt:
+      #   text-only : ~95 tok/s, 11433 MiB VRAM
+      #   + mmproj  : ~95 tok/s, 11423 MiB VRAM
+      # No measurable penalty: the autofitter absorbs it inside the existing
+      # --fit-target budget. Tool calling verified unaffected.
+      - "--mmproj"
+      - "/models/${TARGET_MMPROJ_FILE:-mmproj.gguf}"
+
+      # --- Prompt & Chat Templates ---
+      # Enable Jinja template rendering for modern, precise chat formatting
+      - "--jinja"
+      # Disables thinking blocks to save memory, and forces Spanish system prompt
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": true, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM budget (Round 13c) ---
+      # --fit-target is the margin of VRAM the --fit autofitter leaves FREE, so
+      # lowering it puts MORE of the model on the GPU. Measured at 1 slot / 128K:
+      #   fit 1536 -> 83.8 tok/s (10163MiB used, ~2.1GB free)  <- old inherited value
+      #   fit  768 -> 93.0 tok/s (10981MiB used, ~1.0GB free)
+      #   fit  384 -> 97.2 tok/s (11389MiB used, ~599MiB free)  <- shipped
+      #
+      # 384 ships as an explicit, accepted trade: ~500MiB of reserve is the
+      # agreed budget. Load-tested with a 40k-token prompt (HTTP 200, peak
+      # 11411MiB, zero OOM lines in the server log).
+      #
+      # KNOWN RISK, accepted: that test exercises inference only. This GPU also
+      # drives the Windows desktop this WSL2 instance runs under, so a browser,
+      # a video call or a game can claim VRAM mid-request and there is not much
+      # left to absorb it. If you ever see a CUDA OOM or a restart loop, raise
+      # this to 768 first -- it costs ~4 tok/s and doubles the headroom.
+      #
+      # Validated for --parallel 1 ONLY: compute buffers scale with slot count.
+      - "--fit-target"
+      - "384"
+
+      # --- Context & Attention Options ---
+      # Total context window size across all parallel slots.
+      # This total size is divided by the number of parallel slots (--parallel) to determine
+      # the maximum context size available for each individual client (e.g., 393216 / 3 = 131072 or 128K per slot).
+      # Total context across all slots. With --parallel 1 below this is 131072
+      # (128K) for the single slot -- the measured sweet spot. Total KV-cache
+      # allocation, not per-slot context, is the dominant speed lever on this host:
+      # the same model at ctx 393216/--parallel 3 (also 131072/slot) measured
+      # 46.9 tok/s vs 60.8 at this setting. See docs/BENCHMARKS.md Round 13.
+      - "--ctx-size"
+      - "131072"
+      # Limit maximum tokens to generate per single response. Raised from 32768 per
+      # Qwen's own guidance (up to 81920 for complex coding/math tasks) -- only a
+      # cap, not a forced length; generation still stops at EOS. Matters more now
+      # that preserve_thinking is on (reasoning + answer can need more headroom).
+      - "--predict"
+      - "81920"
+      # Enable Flash Attention to speed up inference and reduce VRAM usage
+      # Bounds the THINKING channel specifically, separately from --predict's
+      # cap on the whole response. Measured need (Round 16): reasoning length
+      # on a fixed hard coding prompt is BIMODAL -- 4 of 6 runs finished around
+      # 4.4-4.8K total tokens, while 2 of 6 ran away to the 81920 ceiling and
+      # returned either empty content or 360K chars of looping. No client-side
+      # max_tokens can fix that: raising it only buys a longer wait for garbage.
+      # 16384 is ~3-4x the measured typical reasoning, so normal coding AND
+      # long assistant answers are untouched, while a runaway is cut early and
+      # still leaves the bulk of --predict 81920 for the visible answer.
+      - "--reasoning-budget"
+      - "16384"
+      - "--reasoning-budget-message"
+      - "Time is nearly up. Stop reasoning now and write the final answer using what you have concluded so far."
+      - "--flash-attn"
+      - "on"
+      # Enable context shifting to automatically slide context window on overflow
+      - "--context-shift"
+
+      # --- Concurrency & Cache Optimization ---
+      # Number of parallel slots/requests (clients) the server can handle simultaneously.
+      # Note: The total context size (--ctx-size) is divided among these active slots to get each slot's max context.
+      # ONE slot. This profile trades concurrency for speed: a single 128K slot at
+      # 79.1 tok/s. If you need concurrent subagents, use --parallel 2 with
+      # --ctx-size 262144 above (still 128K/slot, measured 64.3 tok/s on the
+      # APEX-I-Compact sibling) rather than raising --parallel alone.
+      - "--parallel"
+      - "1"
+      # Quantize key-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-k"
+      - "q4_0"
+      # Quantize value-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-v"
+      - "q4_0"
+      # Set system memory cache limit (in MB) for processing requests
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      # Load the entire model directly into locked RAM/VRAM instead of mmap-ing it.
+      # Equivalent to the old --no-mmap --mlock combo, in the flag this llama.cpp build expects.
+      # NOTE: "mlock" pins the whole model in RAM at load time (no lazy paging), which
+      # requires the model directory to be on native, fast local disk. On a slow/
+      # virtualized filesystem (e.g. a WSL2 /mnt/<drive> 9p mount, ~15MB/s measured)
+      # mlock hangs indefinitely (uninterruptible D-state disk wait) instead of just
+      # loading slowly. If MODELS_DIR ever points at such a mount, switch this to
+      # "none" instead. See docs/VISION_MODEL_EVAL.md and AGENTS.md.
+      - "--load-mode"
+      - "mlock"
+      # Disable warm-up phase to start serving requests instantly without initial delay
+      - "--no-warmup"
+      # Enable Multi-Token Prediction (MTP) speculative decoding: the model's own MTP head
+      # drafts ahead, verified against the full model each step. Requires a GGUF built with
+      # the MTP head (see HF_REPO/HF_FILE in .env.gpu.qwen-35b-a3b-mtp.sample) and a recent llama.cpp build.
+      # Measured: +19% generation throughput (39.8 -> 42.0 tok/s) at equal output quality.
+      # spec-draft-n-max 2 is the quantizer's own recommended value and matched our best
+      # empirical result (3 and 4 were both slower and noisier). Note: the model card warns
+      # --parallel > 1 isn't officially supported yet with MTP -- it was stable across 8
+      # repeated runs here, but drop to --parallel 1 first if you see instability under real
+      # concurrent load.
+      - "--spec-type"
+      - "draft-mtp"
+      - "--spec-draft-n-max"
+      - "2"
+
+      # --- CPU Thread Tuning ---
+      # Number of physical CPU threads for prompt processing
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      # Number of physical CPU threads for batch generation
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      # temp/top_p/top_k/min_p/presence_penalty/repeat_penalty follow Qwen3.6-27B's
+      # official "thinking mode for precise coding tasks" preset (preserve_thinking:
+      # true above), chosen for reliability over creativity per user request. Source:
+      # huggingface.co/Qwen/Qwen3.6-27B model card. (Same base model family as 35B A3B.)
+      # Controls creativity (lower values are more deterministic and focused)
+      - "--temp"
+      - "0.6"
+      # Cumulative probability cutoff for nucleus sampling
+      - "--top-p"
+      - "0.95"
+      # Limit vocabulary selection to top K tokens
+      - "--top-k"
+      - "20"
+      # Minimum token probability threshold (filters out low-probability repetitve tokens)
+      - "--min-p"
+      - "0"
+      # Penalizes repetition based on presence of tokens in the conversation
+      - "--presence-penalty"
+      - "0"
+      # Scale penalty for repeating identical word patterns (breaks infinite loops)
+      - "--repeat-penalty"
+      - "1.0"
+
+    # GPU Device Passthrough Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              # Enable CUDA graphics capabilities inside the container
+              capabilities: [gpu]
+              
+    # Automatically restart the container unless manually stopped
+    restart: unless-stopped

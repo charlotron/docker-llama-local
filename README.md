@@ -1,6 +1,8 @@
-# Claude Code with Local LLM (llama.cpp + Docker)
+# Local LLM agent server (llama.cpp + Docker)
 
-This project allows you to connect **Claude Code** (Anthropic's CLI agent) to local models running on **llama.cpp** inside Docker, with support for both **NVIDIA GPU** acceleration and **CPU-only** modes.
+This project runs local models on **llama.cpp** inside Docker and connects an agentic CLI client (**OpenCode**) to them, with support for both **NVIDIA GPU** acceleration and **CPU-only** modes.
+
+> Claude Code is not supported: it speaks the Anthropic Messages API, and llama.cpp's `/v1/messages` endpoint loses conversation history once tool results accumulate, which stalls agentic sessions mid-task. See `AGENTS.md`.
 
 ## 🏗️ Project Architecture
 
@@ -13,7 +15,7 @@ This project allows you to connect **Claude Code** (Anthropic's CLI agent) to lo
 ### 1. Prerequisites
 - Linux with Docker and Docker Compose installed.
 - **For GPU mode**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed and configured.
-- Claude Code installed (`npm install -g @anthropic-ai/claude-code`).
+- OpenCode installed (`npm install -g opencode-ai`).
 
 ### 2. Configuration
 Choose your mode and create your `.env` file:
@@ -22,6 +24,13 @@ Choose your mode and create your `.env` file:
 ```bash
 cp .env.gpu.qwen-35b-a3b-apex-mini.sample .env
 ```
+
+**For NVIDIA GPU with image and video input:**
+```bash
+cp .env.gpu.qwen-35b-a3b-apex-mini-vision.sample .env
+```
+Same weights and same measured speed as the profile above, plus an 861 MB
+`mmproj` file that enables vision. See `docs/BENCHMARKS.md` for the numbers.
 
 **For CPU only:**
 ```bash
@@ -65,7 +74,7 @@ Based on the [official llama-server documentation](https://github.com/ggml-org/l
 - `--reasoning on`: Enables enhanced reasoning capabilities.
 
 ## 📺 Credits
-This setup is inspired and optimized following the tutorial by **Ing. Kevin David**: [How to configure Claude Code with llama.cpp](https://www.youtube.com/watch?v=Ym967X2VCKY).
+This setup was originally inspired by the tutorial by **Ing. Kevin David**: [How to configure Claude Code with llama.cpp](https://www.youtube.com/watch?v=Ym967X2VCKY).
 
 ---
 

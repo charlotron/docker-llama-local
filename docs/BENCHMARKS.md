@@ -70,13 +70,49 @@ Sampling values are **Qwen's official preset for thinking mode**, not tuned here
 
 Wins on speed **and** quality — there is no trade-off to manage here.
 
+### Vision: `apex-mini-vision`
+
+`docker/docker-compose-gpu-qwen-35b-a3b-apex-mini-vision.yml` — identical weights
+to `apex-mini`, plus an 861 MB `mmproj` file.
+
+Qwen3.6-35B-A3B is multimodal at the base, but the MTP repo ships the weights
+alone, so `/props` reports `"vision": false` and image requests fail with
+`500 image input is not supported`. The vision tower lives in the sibling repo
+`mudler/Qwen3.6-35B-A3B-APEX-GGUF` as `mmproj.gguf`; loading it alongside the
+model turns on both image and video input.
+
+Measured on the same box, same prompt, before and after adding the mmproj:
+
+| Metric | `apex-mini` | `apex-mini-vision` |
+|---|---|---|
+| Throughput | 99.4 / 89.9 tok/s | 94.7 / 93.3 / 95.5 tok/s |
+| VRAM at rest | 11433 MiB | 11423 MiB |
+| Tool calling | works | works |
+| `/props` modalities | `vision: false` | `vision: true`, `video: true` |
+
+**No measurable cost.** The `--fit` autofitter absorbs the mmproj inside the
+existing `--fit-target 384` budget. Both readings sit inside run-to-run noise,
+and VRAM did not move.
+
+Vision verified functionally, not just declared:
+
+- Shapes and colours: "red circle top left, blue square top right, green
+  triangle bottom left" — all three correct.
+- A code screenshot: transcribed the Python exactly, then correctly identified
+  the missing empty-list guard and the resulting `ZeroDivisionError`.
+
+Given it costs nothing, prefer this over `apex-mini` unless you want the
+smallest possible footprint. It also makes `vision-qwen25vl` largely redundant:
+that profile swaps the 35B MoE for a 7B dense model just to read images.
+
 ### Alternatives
 
 | Profile | When | Cost vs default |
 |---|---|---|
+| `apex-mini-vision` | Image or video input | none measured |
 | `apex-compact-2slot` | Two concurrent slots needed | −28% speed, −6.7 pts HumanEval+ |
 | `gpt-oss-20b` | Lightest option, most headroom | 84.6 tok/s; different family |
-| `vision-qwen25vl` | Image input | separate model directory |
+| `vision-qwen25vl` | Image input without the 35B MoE | 7B dense; superseded by `apex-mini-vision` |
 | `qwen-27b-uncensored` | Refusal-free output | **4.4 tok/s**, language drift mid-answer (IQ2_M) |
 | `cpu` | No GPU | — |
 
