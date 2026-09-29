@@ -15,6 +15,20 @@ print_header() {
 
 print_info() { echo -e "  ${CYAN}- $1:${NC} $2"; }
 
+# Ask the running server which model it is actually serving. The GGUF name on
+# disk is authoritative only there -- env vars describe intent, not reality.
+resolve_model_name() {
+    local props
+    props=$(curl -s -m 5 "http://$1:$2/props" 2>/dev/null) || true
+    local path
+    path=$(printf '%s' "$props" | sed -n 's/.*"model_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [[ -n "$path" ]]; then
+        basename "$path" .gguf
+    else
+        echo "unknown (server unreachable)"
+    fi
+}
+
 # --- Configuration Loading ---
 # --- Dependency checks ---
 # Fail here, naming what is missing and how to get it, rather than letting the
@@ -107,17 +121,19 @@ if (fs.existsSync(globalConfigPath)) {
   }
 }
 
-// Resolve the live model name from the server, falling back to the static
-// value only if the server cannot be reached.
+// Resolve the live model name from the server, falling back to the generic
+// alias only if the server cannot be reached.
 const MODEL_NAME = (() => {
   try {
+    // No template literals here: this whole block lives inside a
+    // double-quoted 'node -e' string, so bash would expand them itself.
     const r = require('child_process')
-      .execSync(`curl -s -m 5 http://${process.env.LLAMA_HOST}:${process.env.LLAMA_PORT}/props`,
-                { encoding: 'utf8' });
+      .execSync('curl -s -m 5 http://' + process.env.LLAMA_HOST +
+                ':' + process.env.LLAMA_PORT + '/props', { encoding: 'utf8' });
     const p = JSON.parse(r).model_path;
     if (p) return p.split('/').pop().replace(/\.gguf$/, '');
-  } catch (e) { /* server down: fall through */ }
-  return process.env.HF_FILE || 'llama-local';
+  } catch (e) { /* server unreachable: fall through */ }
+  return 'llama-local';
 })();
 
 const dynamicConfig = {
@@ -140,9 +156,9 @@ const dynamicConfig = {
       },
       'models': {
         'llama-local': {
-          // Ask the server what it is actually serving. HF_FILE is only the
-          // download target and goes stale the moment a different profile is
-          // launched -- it showed a model that had been deleted from disk.
+          // Ask the server what it is actually serving. Never derive this
+          // from HF_FILE: that is only the download target and goes stale the
+          // moment a different profile is launched.
           'name': MODEL_NAME,
           'limit': {
             'context': Number(process.env.LLAMA_CONTEXT_SIZE),
@@ -185,8 +201,7 @@ trap 'rm -f "$OPENCODE_CONFIG"' EXIT SIGINT SIGTERM
 
 print_header "OPENCODE LOCAL CLIENT"
 print_info "Host " "http://$LLAMA_HOST:$LLAMA_PORT"
-print_info "Alias" "$MODEL"
-print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
+print_info "Model" "$(resolve_model_name "$LLAMA_HOST" "$LLAMA_PORT")"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 

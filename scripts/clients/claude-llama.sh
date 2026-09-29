@@ -15,6 +15,20 @@ print_header() {
 
 print_info() { echo -e "  ${CYAN}- $1:${NC} $2"; }
 
+# Ask the running server which model it is actually serving. The GGUF name on
+# disk is authoritative only there -- env vars describe intent, not reality.
+resolve_model_name() {
+    local props
+    props=$(curl -s -m 5 "http://$1:$2/props" 2>/dev/null) || true
+    local path
+    path=$(printf '%s' "$props" | sed -n 's/.*"model_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    if [[ -n "$path" ]]; then
+        basename "$path" .gguf
+    else
+        echo "unknown (server unreachable)"
+    fi
+}
+
 # --- Configuration Loading ---
 # --- Dependency checks ---
 # Fail here, naming what is missing and how to get it, rather than letting the
@@ -68,8 +82,7 @@ export CLAUDE_CODE_ATTRIBUTION_HEADER=0
 
 print_header "CLAUDE CODE LOCAL"
 print_info "Host " "$ANTHROPIC_BASE_URL"
-print_info "Alias" "$ANTHROPIC_MODEL"
-print_info "File " "${HF_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
+print_info "Model" "$(resolve_model_name "$HOST" "$PORT")"
 echo -e "\n  ${YELLOW}! Press Ctrl+C to exit${NC}"
 echo -e "${MAGENTA}--------------------------------------------${NC}\n"
 

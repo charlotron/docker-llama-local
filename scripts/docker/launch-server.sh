@@ -74,12 +74,19 @@ else
     exit 1
 fi
 
+# Which model and which compose file to run are never guessed: a baked-in
+# default silently launches something other than the profile the env file
+# describes, and it rots as soon as that model or compose file is removed.
+for required in HF_REPO HF_FILE COMPOSE_FILE; do
+    if [ -z "${!required}" ]; then
+        print_error "$required is not set in $ENV_FILE"
+        exit 1
+    fi
+done
+
 # Set defaults
-HF_REPO=${HF_REPO:-"unsloth/Qwen3.6-35B-A3B-GGUF"}
-HF_FILE=${HF_FILE:-"Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf"}
 LLAMA_PORT=${LLAMA_PORT:-12345}
 LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
-COMPOSE_FILE=${COMPOSE_FILE:-"docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml"}
 
 # Determine container name and default models folder based on compose file.
 # The container name is read directly from the compose file's own
