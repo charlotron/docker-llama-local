@@ -59,7 +59,7 @@ services:
 
       # --- VRAM & Memory Allocation ---
       - "--fit-target"
-      - "1536"
+      - "384"
 
       # --- Context & Attention Options ---
       # NOTE: gpt-oss-20b's native context window is 131072 (128K) -- unlike the Qwen

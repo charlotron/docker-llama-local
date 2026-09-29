@@ -1,0 +1,26 @@
+=== matrix started 03:31:59 (all downloads complete) ===
+A champion Q4_K_XL par2 (196k/slot) BASELINE | avg=45.14 tok/s | samples: 41.57 43.22 44.24 48.74 47.95 | par=2 ctx=393216 per-slot=196608 | vram=9895 MiB ram=19/23Gi swap=119MiB
+B champion Q4_K_XL par1 (131k/slot) | avg=60.8 tok/s | samples: 59.45 61.98 63.51 60.71 58.33 | par=1 ctx=131072 per-slot=131072 | vram=10109 MiB ram=16/23Gi swap=144MiB
+C champion Q4_K_XL par3 (131k/slot) | avg=46.9 tok/s | samples: 40.63 48.62 48.81 48.45 48.01 | par=3 ctx=393216 per-slot=131072 | vram=9699 MiB ram=19/23Gi swap=160MiB
+H Qwythos-9B-v2 MTP par2 (196k/slot) | avg=27.42 tok/s | samples: 29.05 26.88 26.14 27.05 27.96 | par=2 ctx=393216 per-slot=196608 | vram=9688 MiB ram=6/23Gi swap=161MiB
+D Q3_K_XL MTP par2 (196k/slot) | avg=45.57 tok/s | samples: 45.39 45.28 45.15 45.79 46.25 | par=2 ctx=393216 per-slot=196608 | vram=9836 MiB ram=13/23Gi swap=172MiB
+E Q3_K_XL MTP par3 (131k/slot) | avg=44.66 tok/s | samples: 43.67 45.17 44.25 45.2 45.01 | par=3 ctx=393216 per-slot=131072 | vram=9735 MiB ram=13/23Gi swap=211MiB
+F APEX-I-Compact MTP par2 (196k/slot) | avg=53.5 tok/s | samples: 49.07 51.67 54.48 56.35 55.94 | par=2 ctx=393216 per-slot=196608 | vram=10029 MiB ram=13/23Gi swap=230MiB
+G APEX-I-Mini MTP par2 (196k/slot) | avg=50.2 tok/s | samples: 52.18 49.04 50.27 49.55 49.95 | par=2 ctx=393216 per-slot=196608 | vram=9989 MiB ram=10/23Gi swap=233MiB
+I Qwen3.8-35B-A3B-Distill Q3_K_M no-MTP par2 | avg=48.14 tok/s | samples: 48.39 47.37 47.95 49.09 47.92 | par=2 ctx=393216 per-slot=196608 | vram=10083 MiB ram=11/23Gi swap=234MiB
+=== SPEED_MATRIX_COMPLETE 03:46:52 ===
+=== matrix2 (KV-cache lever) started 04:11:48 ===
+B2 champion Q4_K_XL par2 ctx262144 (131k/slot) | avg=49.88 tok/s | samples: 45.86 46.13 52.56 51.85 52.98 | par=2 ctx=262144 per-slot=131072 | vram=9988 MiB ram=17/23Gi swap=337MiB
+F2 APEX-I-Compact par1 (131k/slot) | avg=75.74 tok/s | samples: 72.68 72.95 79.49 76.14 77.46 | par=1 ctx=131072 per-slot=131072 | vram=10265 MiB ram=10/23Gi swap=309MiB
+F3 APEX-I-Compact par2 ctx262144 (131k/slot) | avg=64.28 tok/s | samples: 62.6 63.18 65.61 65.36 64.65 | par=2 ctx=262144 per-slot=131072 | vram=10057 MiB ram=12/23Gi swap=310MiB
+G2 APEX-I-Mini par1 (131k/slot) | avg=79.11 tok/s | samples: 76.96 80.86 79.87 77.99 79.86 | par=1 ctx=131072 per-slot=131072 | vram=10208 MiB ram=8/23Gi swap=309MiB
+D2 Q3_K_XL par1 (131k/slot) | avg=64.47 tok/s | samples: 61.94 64.72 63.85 66.3 65.56 | par=1 ctx=131072 per-slot=131072 | vram=10084 MiB ram=10/23Gi swap=308MiB
+I2 Distill Q3_K_M no-MTP par1 (131k/slot) | avg=58.14 tok/s | samples: 57.91 58.14 58.73 57.7 58.21 | par=1 ctx=131072 per-slot=131072 | vram=10182 MiB ram=9/23Gi swap=308MiB
+H2 Qwythos-9B-v2 par1 (131k/slot) | avg=113.08 tok/s | samples: 112.83 110.62 114.85 111.93 115.15 | par=1 ctx=131072 per-slot=131072 | vram=8532 MiB ram=1/23Gi swap=308MiB
+=== MATRIX2_COMPLETE 04:20:36 ===
+=== FINAL_CHAMPION_RESTORED 04:20:59 health={"status":"ok"} models={"models":[{"name":"llama-local","model":"llama-local","modified_at":"","size":"","digest":"","type":"model","description":"","tags":[""],"capabilities":["completion"],"parameters":"","details":{"pare ===
+J APEX-I-Mini par2 ctx262144 (131k/slot) | avg=58.62 tok/s | samples: 56.51 56.52 55.54 61.82 62.73 | par=2 ctx=262144 per-slot=131072 | vram=10034 MiB ram=9/23Gi swap=281MiB
+K APEX-I-Mini par3 ctx393216 (131k/slot) | avg=51.62 tok/s | samples: 52.19 51.19 51.91 51.63 51.17 | par=3 ctx=393216 per-slot=131072 | vram=9870 MiB ram=11/23Gi swap=281MiB
+EXTRA_COMPLETE
+KV-q8_0 APEX-Mini par1 131k | avg=75.11 tok/s | samples: 73.41 74.83 76.04 75.59 75.66 | par=1 ctx=131072 per-slot=131072 | vram=10240 MiB ram=8/23Gi swap=289MiB
+KV-f16 APEX-Mini par1 131k | avg=46.73 tok/s | samples: 61.78 46.09 58.12 33.51 34.17 | par=1 ctx=131072 per-slot=131072 | vram=10252 MiB ram=9/23Gi swap=388MiB

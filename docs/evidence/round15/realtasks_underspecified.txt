@@ -1,0 +1,18 @@
+temperatura=0.6 (produccion) | repeticiones=2 | sin max_tokens, como OpenCode
+
+tarea        intento   tok/s    seg    resultado  detalle
+lru_ttl            1    98.7     47        FALLA  TypeError: LRUCache.__init__() got an unexpected keyword arg
+lru_ttl            2    95.6     65        FALLA  TypeError: LRUCache.__init__() got an unexpected keyword arg
+retry              1    97.4     31        FALLA  TypeError: retry() got an unexpected keyword argument 'times
+retry              2    94.2     92        FALLA  TypeError: retry() got an unexpected keyword argument 'times
+csv_group          1    99.5    104         PASA  
+csv_group          2   100.3    166         PASA  
+tokenizer          1    94.5     68         PASA  
+tokenizer          2    94.2     61         PASA  
+path_merge         1    96.3     22         PASA  
+path_merge         2    97.9     22         PASA  
+
+RESULTADO: 6/10 (60%) tareas reales con codigo que ejecuta y pasa sus tests
+Referencia HumanEval+ (temp 0, benchmark publico): 82.3%
+
+[exited with code 0]

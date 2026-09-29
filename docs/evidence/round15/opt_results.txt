@@ -1,0 +1,18 @@
+=== A: fit-target sweep on the remaining profiles 17:24:15 ===
+CHAMP 1slot fit1536 | avg=59.99 tok/s | 57.88 57.49 59.59 63.95 61.03 | par=1 ctx=131072 fit=1536 kv=q4_0/q4_0 | vram=10073MiB free=1925MiB ram=16370MiB oom=0
+CHAMP 1slot fit768 | avg=65.77 tok/s | 66.19 64.99 67.25 65.48 64.96 | par=1 ctx=131072 fit=768 kv=q4_0/q4_0 | vram=10855MiB free=1143MiB ram=15585MiB oom=0
+CHAMP 1slot fit384 | avg=66.35 tok/s | 61.81 66.37 67.14 70.67 65.74 | par=1 ctx=131072 fit=384 kv=q4_0/q4_0 | vram=11175MiB free=823MiB ram=15239MiB oom=0
+OSS20B 1slot fit1536 | avg=60.42 tok/s | 61.17 63.36 63.04 61.48 53.05 | par=1 ctx=131072 fit=1536 kv=q4_0/q4_0 | vram=10187MiB free=1811MiB ram=4520MiB oom=0
+OSS20B 1slot fit768 | avg=77.52 tok/s | 77.36 77.72 77.29 77.65 77.58 | par=1 ctx=131072 fit=768 kv=q4_0/q4_0 | vram=10999MiB free=999MiB ram=3688MiB oom=0
+OSS20B 1slot fit384 | avg=84.56 tok/s | 84.79 84.46 84.68 84.35 84.5 | par=1 ctx=131072 fit=384 kv=q4_0/q4_0 | vram=11403MiB free=595MiB ram=3247MiB oom=0
+27B 1slot fit1536 | avg=6.32 tok/s | 6.25 6.72 6.0 | par=1 ctx=131072 fit=1536 kv=q4_0/q4_0 | vram=9719MiB free=2279MiB ram=11399MiB oom=0
+27B 1slot fit384 | avg=6.74 tok/s | 6.29 6.83 7.1 | par=1 ctx=131072 fit=384 kv=q4_0/q4_0 | vram=10849MiB free=1149MiB ram=10252MiB oom=0
+=== FIT_SWEEP_B_COMPLETE 17:35:11 ===
+=== ALL_COMPLETE health={"status":"ok"} 17:36:31 ===
+=== PHASE1: 27B APEX speed 2026-09-27 19:44:27 ===
+27B-APEX-Nano 1slot fit1536 | avg=8.16 tok/s | 8.27 8.18 8.14 8.11 8.08 | par=1 ctx=131072 fit=1536 kv=q4_0/q4_0 | vram=9782MiB free=2216MiB ram=7927MiB oom=0
+27B-APEX-Nano 1slot fit768 | avg=9.53 tok/s | 9.73 9.45 9.46 9.53 9.47 | par=1 ctx=131072 fit=768 kv=q4_0/q4_0 | vram=10578MiB free=1420MiB ram=7165MiB oom=0
+27B-APEX-Nano 1slot fit384 | avg=10.1 tok/s | 10.34 10.25 10.07 10.12 9.71 | par=1 ctx=131072 fit=384 kv=q4_0/q4_0 | vram=10849MiB free=1149MiB ram=6920MiB oom=0
+27B-APEX-Mini 1slot fit384 | avg=6.7 tok/s | 6.71 6.49 6.78 6.76 6.76 | par=1 ctx=131072 fit=384 kv=q4_0/q4_0 | vram=10905MiB free=1093MiB ram=9320MiB oom=0
+=== PHASE1_COMPLETE 19:53:24 ===
+=== PHASE2_COMPLETE 20:06:16 ===

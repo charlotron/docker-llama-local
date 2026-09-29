@@ -1,0 +1,12 @@
+=== perplexity wikitext-2 (binary /app/llama-perplexity) 2026-09-27 19:53:24 ===
+=== perplexity wikitext-2 (binary /app/llama-perplexity) 2026-09-27 20:10:21 ===
+=== perplexity wikitext-2 (binary /app/llama-perplexity) 2026-09-27 20:55:43 ===
+gpt-oss-20b | Final estimate: PPL = 152.4012 +/- 2.99021 | size=11.87 GB | gpt-oss-20b-UD-Q4_K_XL.gguf
+27B-APEX-Nano | Final estimate: PPL = 7.3462 +/- 0.11431 | size=11.24 GB | Qwen3.8-27B-APEX-I-Nano.gguf
+APEX-Mini-35B | Final estimate: PPL = 7.3221 +/- 0.11663 | size=14.27 GB | Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf
+27B-APEX-Mini | Final estimate: PPL = 6.9788 +/- 0.10797 | size=13.94 GB | Qwen3.8-27B-APEX-I-Mini.gguf
+27B-IQ4_XS | Final estimate: PPL = 6.7692 +/- 0.10323 | size=14.25 GB | Qwen3.8-27B-UD-IQ4_XS.gguf
+APEX-Compact-35B | Final estimate: PPL = 6.7772 +/- 0.10456 | size=17.33 GB | Qwen3.6-35B-A3B-APEX-MTP-I-Compact.gguf
+=== perplexity wikitext-2 (binary /app/llama-perplexity) 2026-09-27 21:32:12 ===
+=== perplexity wikitext-2 (binary /app/llama-perplexity) 2026-09-27 22:11:57 ===
+=== PPL_COMPLETE 22:11:57 ===

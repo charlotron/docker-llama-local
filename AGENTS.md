@@ -34,13 +34,13 @@ you switch often).** Create a real, non-`.sample` file for each profile you
 use regularly, by copying the corresponding `.sample` and filling in your
 machine's `MODELS_DIR`/host/port/threads once:
 ```
-cp .env.gpu.qwen-27b-mtp.sample .env.gpu.qwen-27b-mtp
-# edit .env.gpu.qwen-27b-mtp: set MODELS_DIR to your real model directory
+cp .env.gpu.qwen-35b-a3b-apex-mini.sample .env.gpu.qwen-35b-a3b-apex-mini
+# edit .env.gpu.qwen-35b-a3b-apex-mini: set MODELS_DIR to your real model directory
 ```
 Then launch any profile directly, no editing required per switch:
 ```
-./scripts/docker/launch-server.sh .env.gpu.qwen-27b-mtp
-./scripts/docker/launch-server.sh .env.gpu.qwen-35b-a3b-mtp
+./scripts/docker/launch-server.sh .env.gpu.qwen-35b-a3b-apex-mini
+./scripts/docker/launch-server.sh .env.gpu.gpt-oss-20b
 ```
 These per-profile real files are gitignored (`.env.*` except `*.sample` — see
 `.gitignore`) — safe to keep host-specific paths in them, they will never be
@@ -95,3 +95,37 @@ paths (see Known gotchas below).
   path is gitignored and won't get updated by a `git pull` — it'll fail with
   "no such file or directory" the next time you launch. Check `COMPOSE_FILE`
   in your real env files after pulling changes that touch `docker/*.yml`.
+- **`preserve_thinking: true` + a small client `max_tokens` returns EMPTY
+  content, not an error.** Every GPU profile here enables thinking via
+  `--chat-template-kwargs '{"preserve_thinking": true, ...}'`. The reasoning
+  channel is billed against the same budget as the visible answer, and these
+  models reason at length: measured 2227 reasoning tokens with **0 content
+  tokens** on a request capped at 768. The response comes back HTTP 200 with
+  `finish_reason: "length"` and `content: ""` — a silent, valid-looking empty
+  answer that is easy to misdiagnose as a broken model or a bad prompt.
+  This cost real measurements twice: HumanEval+ initially scored 5.5% purely
+  because EvalPlus hardcodes `max_new_tokens: int = 768` (patch it in
+  `evalplus/provider/base.py`), and the needle-in-a-haystack recall test
+  scored 3/5 at `max_tokens: 400` while the correct answer was present in the
+  reasoning trace in **19 of 19** cases — a formatting failure, not a recall
+  failure. Budget is not free either: raising the cap from 4096 to 8192 moved
+  APEX-I-Mini from 87.2/82.3 to 93.9/87.2 on HumanEval/HumanEval+.
+  **Give any client at least 4096 `max_tokens`, and prefer 8192 for coding.**
+  If a client cannot be configured that far, disable thinking for it rather
+  than letting it receive empty strings.
+- **`--reasoning-budget` must sit BELOW the client's `max_tokens`, or it does
+  nothing.** The budget caps the thinking channel and injects a "wrap up now"
+  nudge, but it can only fire if the request is still alive when the budget is
+  reached. Set it above the client cap and the client truncates first, mid-
+  thought, which is the empty-content failure the budget was meant to prevent.
+  Measured: with `--reasoning-budget 16384` and a client cap of 8192, **38% of
+  164 HumanEval problems returned empty solutions** -- the budget never fired
+  once. The same budget looked like it worked when tested at `max_tokens
+  81920`, which is why a generous test cap hides this bug. The rule is:
+
+      client max_tokens  >  --reasoning-budget  +  room for the answer
+
+  The shipped `apex-mini` profile uses 16384, so any client hitting it needs at
+  least ~24576 to be safe (16384 reasoning + 8192 answer). If your clients
+  cannot go that high, lower `--reasoning-budget` to match them instead --
+  a budget larger than the smallest client cap protects nobody.

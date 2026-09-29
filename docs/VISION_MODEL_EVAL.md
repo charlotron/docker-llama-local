@@ -1,6 +1,6 @@
-# Vision model evaluation — Qwen2.5-VL-7B-Instruct (gpu-host)
+# Vision model evaluation — Qwen2.5-VL-7B-Instruct
 
-> Separate from `BENCHMARKS.md`/`BENCHMARK_RESULTS.md` on purpose: this is a different
+> Separate from `BENCHMARKS.md`/`BENCHMARKS.md` on purpose: this is a different
 > model category (multimodal image+text, not text-only) and a different weight class
 > (7B vision-language model vs. the 27B/35B text models in the main investigation), so
 > "is it better than the other models" doesn't have a fair apples-to-apples answer on
@@ -10,12 +10,12 @@
 ## Background
 
 A pre-existing, separate project (`llama-image-analyzer-gpu`) was found running on
-gpu-host, stopped ("Exited (0) 2 months ago"). It runs a different model family
+the GPU host, stopped ("Exited (0) 2 months ago"). It runs a different model family
 (Qwen2.5-VL, vision-capable) from the 4 shipped profiles in this repo (Qwen3.x,
 text-only, confirmed via `/props` + no mmproj file).
 
-Source project location on gpu-host:
-`/path/to/llama-image-analyzer/docker/docker-compose-gpu.yml`
+Source project location on the GPU host:
+`${REPO_DIR}/../llama-image-analyzer/docker/docker-compose-gpu.yml`
 (a separate git-less project directory, not part of this repo; found via
 `docker inspect llama-image-analyzer-gpu` mount info, not by filesystem search).
 
@@ -41,7 +41,7 @@ Source project location on gpu-host:
 1. **`--no-mmap` is gone from this llama.cpp build.** It errored out
    (`error: invalid argument: --no-mmap`) on every launch attempt. This build now uses
    `--load-mode <MODE>` instead (same finding already documented for the 35B profile in
-   `BENCHMARK_RESULTS.md`). Fixed by switching to `--load-mode none`.
+   `BENCHMARKS.md`). Fixed by switching to `--load-mode none`.
 
 2. **`--load-mode mlock` hangs indefinitely when the model sits on a slow/virtualized
    filesystem.** The project's model directory (`docker/data/models`) is bind-mounted
@@ -50,7 +50,7 @@ Source project location on gpu-host:
    35s for 500MB). Under `--load-mode mlock`, the server process sat in uninterruptible
    disk-wait (`D` state) for 10+ minutes with **zero** RSS growth after an initial
    partial read — it never recovered on its own and was killed manually. Copying the
-   9.3GB of model+mmproj to native ext4 storage (`/home/<user>/data/...`, still
+   9.3GB of model+mmproj to native ext4 storage (`${HOME}/data/...`, still
    over the same slow 9p link for the *read* side, so the copy itself took ~15-20
    minutes) and switching to `--load-mode none` fixed it completely: **model loaded in
    6.7 seconds** once both files were on local disk. The compose file's `volumes:` also
@@ -196,7 +196,7 @@ more evidence is wanted before relying on this profile for chart-reading specifi
 
 ## Housekeeping
 
-All containers (`llama-image-analyzer-gpu`, `llama-cpp-gpu`) were stopped on gpu-host
+All containers (`llama-image-analyzer-gpu`, `llama-cpp-gpu`) were stopped on the GPU host
 at the end of this evaluation, per this investigation's established power-saving
 practice. Nothing was committed or pushed — changes are left as uncommitted edits for
 review:

@@ -1,5 +1,5 @@
 # =================================================================
-# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) ACCELERATED MODE
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) - Qwen3.6-35B-A3B APEX-MTP-I-Mini
 # =================================================================
 name: docker-llama-gpu
 
@@ -33,7 +33,7 @@ services:
       - "--server"
       # Specify the path of the target GGUF model file inside the container
       - "--model"
-      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf}"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Mini.gguf}"
       # Set the model alias (used as the model name in completions calls)
       - "--alias"
       - "llama-local"
@@ -51,17 +51,38 @@ services:
       - "--chat-template-kwargs"
       - '{"preserve_thinking": true, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
 
-      # --- VRAM & Memory Allocation ---
-      # Limit VRAM allocation (in MB) for model layers to prevent out-of-memory errors on the GPU
+      # --- VRAM budget (Round 13c) ---
+      # --fit-target is the margin of VRAM the --fit autofitter leaves FREE, so
+      # lowering it puts MORE of the model on the GPU. Measured at 1 slot / 128K:
+      #   fit 1536 -> 83.8 tok/s (10163MiB used, ~2.1GB free)  <- old inherited value
+      #   fit  768 -> 93.0 tok/s (10981MiB used, ~1.0GB free)
+      #   fit  384 -> 97.2 tok/s (11389MiB used, ~599MiB free)  <- shipped
+      #
+      # 384 ships as an explicit, accepted trade: ~500MiB of reserve is the
+      # agreed budget. Load-tested with a 40k-token prompt (HTTP 200, peak
+      # 11411MiB, zero OOM lines in the server log).
+      #
+      # KNOWN RISK, accepted: that test exercises inference only. This GPU also
+      # drives the Windows desktop this WSL2 instance runs under, so a browser,
+      # a video call or a game can claim VRAM mid-request and there is not much
+      # left to absorb it. If you ever see a CUDA OOM or a restart loop, raise
+      # this to 768 first -- it costs ~4 tok/s and doubles the headroom.
+      #
+      # Validated for --parallel 1 ONLY: compute buffers scale with slot count.
       - "--fit-target"
-      - "1536"
+      - "384"
 
       # --- Context & Attention Options ---
       # Total context window size across all parallel slots.
       # This total size is divided by the number of parallel slots (--parallel) to determine
       # the maximum context size available for each individual client (e.g., 393216 / 3 = 131072 or 128K per slot).
+      # Total context across all slots. With --parallel 1 below this is 131072
+      # (128K) for the single slot -- the measured sweet spot. Total KV-cache
+      # allocation, not per-slot context, is the dominant speed lever on this host:
+      # the same model at ctx 393216/--parallel 3 (also 131072/slot) measured
+      # 46.9 tok/s vs 60.8 at this setting. See docs/BENCHMARKS.md Round 13.
       - "--ctx-size"
-      - "393216"
+      - "131072"
       # Limit maximum tokens to generate per single response. Raised from 32768 per
       # Qwen's own guidance (up to 81920 for complex coding/math tasks) -- only a
       # cap, not a forced length; generation still stops at EOS. Matters more now
@@ -69,6 +90,19 @@ services:
       - "--predict"
       - "81920"
       # Enable Flash Attention to speed up inference and reduce VRAM usage
+      # Bounds the THINKING channel specifically, separately from --predict's
+      # cap on the whole response. Measured need (Round 16): reasoning length
+      # on a fixed hard coding prompt is BIMODAL -- 4 of 6 runs finished around
+      # 4.4-4.8K total tokens, while 2 of 6 ran away to the 81920 ceiling and
+      # returned either empty content or 360K chars of looping. No client-side
+      # max_tokens can fix that: raising it only buys a longer wait for garbage.
+      # 16384 is ~3-4x the measured typical reasoning, so normal coding AND
+      # long assistant answers are untouched, while a runaway is cut early and
+      # still leaves the bulk of --predict 81920 for the visible answer.
+      - "--reasoning-budget"
+      - "16384"
+      - "--reasoning-budget-message"
+      - "Time is nearly up. Stop reasoning now and write the final answer using what you have concluded so far."
       - "--flash-attn"
       - "on"
       # Enable context shifting to automatically slide context window on overflow
@@ -77,9 +111,12 @@ services:
       # --- Concurrency & Cache Optimization ---
       # Number of parallel slots/requests (clients) the server can handle simultaneously.
       # Note: The total context size (--ctx-size) is divided among these active slots to get each slot's max context.
-      # 393216 / 2 = 196608 (192K) per slot -- fewer concurrent slots, more context each.
+      # ONE slot. This profile trades concurrency for speed: a single 128K slot at
+      # 79.1 tok/s. If you need concurrent subagents, use --parallel 2 with
+      # --ctx-size 262144 above (still 128K/slot, measured 64.3 tok/s on the
+      # APEX-I-Compact sibling) rather than raising --parallel alone.
       - "--parallel"
-      - "2"
+      - "1"
       # Quantize key-cache to q4_0 format to save massive amounts of VRAM.
       # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
       # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.

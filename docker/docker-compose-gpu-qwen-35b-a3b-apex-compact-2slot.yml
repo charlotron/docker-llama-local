@@ -1,0 +1,174 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA) - Qwen3.6-35B-A3B APEX-MTP-I-Compact, 2 slots
+# =================================================================
+name: docker-llama-gpu
+
+services:
+  # The main llama.cpp inference service
+  llama-cpp:
+    # Use the official high-performance CUDA-enabled llama.cpp docker image
+    # Requires a build with real --spec-type draft-mtp support (build >= 10975).
+    # Run `docker pull ghcr.io/ggml-org/llama.cpp:full-cuda` before first deploy to make
+    # sure you're not stuck on an older build where MTP flags are silently inert.
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+    
+    # Custom name for the running container
+    container_name: llama-cpp-gpu
+    
+    # Restrict container memory usage to protect host system stability (recommended for large models)
+    mem_limit: 24g
+    
+    # Expose the configured llama-server port to the host machine
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+      
+    # Mount the local or external model directory into the container's /models folder
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+      
+    # Command-line flags passed directly to llama-server
+    command:
+      # --- Basic Server Setup ---
+      # Enable llama-server REST API mode (required for client agents)
+      - "--server"
+      # Specify the path of the target GGUF model file inside the container
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.6-35B-A3B-APEX-MTP-I-Compact.gguf}"
+      # Set the model alias (used as the model name in completions calls)
+      - "--alias"
+      - "llama-local"
+      # Bind to 0.0.0.0 to accept requests from other devices in your network
+      - "--host"
+      - "0.0.0.0"
+      # The internal port that llama-server will listen on
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      # Enable Jinja template rendering for modern, precise chat formatting
+      - "--jinja"
+      # Disables thinking blocks to save memory, and forces Spanish system prompt
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": true, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM & Memory Allocation ---
+      # Target MARGIN of VRAM to leave FREE on each device for the --fit autofitter
+      # (llama.cpp default: 1024). It is not a cap on what the model may use -- it is
+      # the headroom --fit refuses to touch, so LOWERING it puts MORE of the model on
+      # the GPU. Measured on APEX-I-Mini at 1 slot / 128K: 1536 -> 83.8 tok/s
+      # (10163MiB VRAM), 768 -> 93.0, 384 -> 97.2 (11389MiB). Raise it again if you
+      # add slots: compute buffers scale with --parallel.
+      - "--fit-target"
+      - "384"
+
+      # --- KV cache sizing (Round 13) ---
+      # Total KV-cache allocation, NOT per-slot context, is the dominant speed
+      # lever on this 23GB host. Allocate exactly slots x 131072 and no more.
+      - "--ctx-size"
+      - "262144"
+      # Limit maximum tokens to generate per single response. Raised from 32768 per
+      # Qwen's own guidance (up to 81920 for complex coding/math tasks) -- only a
+      # cap, not a forced length; generation still stops at EOS. Matters more now
+      # that preserve_thinking is on (reasoning + answer can need more headroom).
+      - "--predict"
+      - "81920"
+      # Enable Flash Attention to speed up inference and reduce VRAM usage
+      - "--flash-attn"
+      - "on"
+      # Enable context shifting to automatically slide context window on overflow
+      - "--context-shift"
+
+      # TWO slots at 128K each. This profile uses APEX-I-Compact, not I-Mini:
+      # the ranking between the two APEX quants INVERTS with concurrency.
+      #   1 slot  -> I-Mini 79.11 tok/s  >  I-Compact 75.74
+      #   2 slots -> I-Compact 64.28     >  I-Mini 58.62
+      # I-Mini also gets noticeably noisier at 2 slots (+/-3.4 vs Compact's
+      # +/-1.2), so Compact is both faster and steadier once a second slot
+      # exists. Use the I-Mini profile only for single-client work.
+      - "--parallel"
+      - "2"
+      # Quantize key-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-k"
+      - "q4_0"
+      # Quantize value-cache to q4_0 format to save massive amounts of VRAM.
+      # Note: q4_0 is used here to support parallel execution (e.g., calling multiple AI subagents simultaneously).
+      # If parallel execution is not needed (single-client mode), you can change this to q8_0 to improve cache precision and context quality.
+      - "--cache-type-v"
+      - "q4_0"
+      # Set system memory cache limit (in MB) for processing requests
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance & Speed Optimization ---
+      # Load the entire model directly into locked RAM/VRAM instead of mmap-ing it.
+      # Equivalent to the old --no-mmap --mlock combo, in the flag this llama.cpp build expects.
+      # NOTE: "mlock" pins the whole model in RAM at load time (no lazy paging), which
+      # requires the model directory to be on native, fast local disk. On a slow/
+      # virtualized filesystem (e.g. a WSL2 /mnt/<drive> 9p mount, ~15MB/s measured)
+      # mlock hangs indefinitely (uninterruptible D-state disk wait) instead of just
+      # loading slowly. If MODELS_DIR ever points at such a mount, switch this to
+      # "none" instead. See docs/VISION_MODEL_EVAL.md and AGENTS.md.
+      - "--load-mode"
+      - "mlock"
+      # Disable warm-up phase to start serving requests instantly without initial delay
+      - "--no-warmup"
+      # Enable Multi-Token Prediction (MTP) speculative decoding: the model's own MTP head
+      # drafts ahead, verified against the full model each step. Requires a GGUF built with
+      # the MTP head (see HF_REPO/HF_FILE in .env.gpu.qwen-35b-a3b-mtp.sample) and a recent llama.cpp build.
+      # Measured: +19% generation throughput (39.8 -> 42.0 tok/s) at equal output quality.
+      # spec-draft-n-max 2 is the quantizer's own recommended value and matched our best
+      # empirical result (3 and 4 were both slower and noisier). Note: the model card warns
+      # --parallel > 1 isn't officially supported yet with MTP -- it was stable across 8
+      # repeated runs here, but drop to --parallel 1 first if you see instability under real
+      # concurrent load.
+      - "--spec-type"
+      - "draft-mtp"
+      - "--spec-draft-n-max"
+      - "2"
+
+      # --- CPU Thread Tuning ---
+      # Number of physical CPU threads for prompt processing
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      # Number of physical CPU threads for batch generation
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling & Anti-Loop Parameters ---
+      # temp/top_p/top_k/min_p/presence_penalty/repeat_penalty follow Qwen3.6-27B's
+      # official "thinking mode for precise coding tasks" preset (preserve_thinking:
+      # true above), chosen for reliability over creativity per user request. Source:
+      # huggingface.co/Qwen/Qwen3.6-27B model card. (Same base model family as 35B A3B.)
+      # Controls creativity (lower values are more deterministic and focused)
+      - "--temp"
+      - "0.6"
+      # Cumulative probability cutoff for nucleus sampling
+      - "--top-p"
+      - "0.95"
+      # Limit vocabulary selection to top K tokens
+      - "--top-k"
+      - "20"
+      # Minimum token probability threshold (filters out low-probability repetitve tokens)
+      - "--min-p"
+      - "0"
+      # Penalizes repetition based on presence of tokens in the conversation
+      - "--presence-penalty"
+      - "0"
+      # Scale penalty for repeating identical word patterns (breaks infinite loops)
+      - "--repeat-penalty"
+      - "1.0"
+
+    # GPU Device Passthrough Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              # Enable CUDA graphics capabilities inside the container
+              capabilities: [gpu]
+              
+    # Automatically restart the container unless manually stopped
+    restart: unless-stopped

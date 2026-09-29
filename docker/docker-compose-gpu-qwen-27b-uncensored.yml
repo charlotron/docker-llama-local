@@ -4,7 +4,7 @@
 # Alternate profile: a community "uncensored" fine-tune of the dense 27B model
 # (HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF), not the official
 # unsloth base line. Best verified quant on this hardware (RTX 4070 SUPER 12GB /
-# 23GB WSL RAM): IQ2_M -- 4.40 tok/s, swap-free. See BENCHMARK_RESULTS.md
+# 23GB WSL RAM): IQ2_M -- 4.40 tok/s, swap-free. See BENCHMARKS.md
 # "Round 7" and docs/BENCHMARKS.md for full evidence.
 #
 # IMPORTANT: unlike the official 27B profile (docker-compose-gpu-qwen-27b-mtp.yml),
@@ -38,7 +38,7 @@ services:
       # --- Basic Server Setup ---
       - "--server"
       - "--model"
-      - "/models/${TARGET_MODEL_FILE:-HauhauCS-Aggressive-IQ2_M.gguf}"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-IQ2_M.gguf}"
       - "--alias"
       - "llama-local"
       - "--host"

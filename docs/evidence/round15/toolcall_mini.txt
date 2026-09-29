@@ -1,0 +1,17 @@
+HTTP:204
+=== enviado 20:51:59 ===
+caso              ok      fallos
+simple          3/3      
+selection       3/3      
+args_exact      3/3      
+args_multi      2/3      llamo:ninguna
+trap            3/3      
+chain           3/3      
+multiturn       2/3      llamo:leer_documento
+abstain         3/3      
+abstain_hard    3/3      
+long_ctx        3/3      
+
+Mini | TOTAL | 28/30 (93%)
+
+[exited with code 0]

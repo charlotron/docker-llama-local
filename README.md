@@ -20,7 +20,7 @@ Choose your mode and create your `.env` file:
 
 **For NVIDIA GPU (Recommended):**
 ```bash
-cp .env.gpu.qwen-35b-a3b-mtp.sample .env
+cp .env.gpu.qwen-35b-a3b-apex-mini.sample .env
 ```
 
 **For CPU only:**
@@ -74,7 +74,7 @@ This setup is inspired and optimized following the tutorial by **Ing. Kevin Davi
   - CPU: `docker logs -f llama-cpp`
 - **Stop server**: 
   - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
-  - `docker compose -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml down`
+  - `docker compose -f docker/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml down`
   - `docker compose -f docker/docker-compose-cpu.yml down`
 - **Deep Clean (Delete models and reset)**:
   ```bash

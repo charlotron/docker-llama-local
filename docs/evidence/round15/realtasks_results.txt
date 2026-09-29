@@ -1,0 +1,23 @@
+temperatura=0.6 (produccion) | repeticiones=3 | sin max_tokens, como OpenCode
+
+tarea        intento   tok/s    seg    resultado  detalle
+lru_ttl            1    97.5     52         PASA  
+lru_ttl            2    96.0     51         PASA  
+lru_ttl            3    96.4     52         PASA  
+retry              1    97.2    171         PASA  
+retry              2    95.9     59         PASA  
+retry              3    98.5    158         PASA  
+csv_group          1    98.7     95         PASA  
+csv_group          2   101.5     22         PASA  
+csv_group          3    97.5     68         PASA  
+tokenizer          1    96.7     86         PASA  
+tokenizer          2    95.1     75         PASA  
+tokenizer          3    96.6     79         PASA  
+path_merge         1    96.9     65         PASA  
+path_merge         2    97.5     19         PASA  
+path_merge         3    98.1     18         PASA  
+
+RESULTADO: 15/15 (100%) tareas reales con codigo que ejecuta y pasa sus tests
+Referencia HumanEval+ (temp 0, benchmark publico): 82.3%
+
+[exited with code 0]

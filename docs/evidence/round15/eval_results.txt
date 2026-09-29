@@ -1,0 +1,4 @@
+APEX-Mini-35B | HumanEval+ | pass@1:	0.872
+APEX-Mini-35B | HumanEval+ | pass@1:	0.823
+APEX-Compact-35B | HumanEval+ | pass@1:	0.787
+APEX-Compact-35B | HumanEval+ | pass@1:	0.756
