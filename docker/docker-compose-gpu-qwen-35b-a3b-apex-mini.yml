@@ -130,21 +130,26 @@ services:
       # Host-RAM budget for cached prompt prefixes, so a request that shares a
       # prefix with an earlier one skips the prefill instead of reprocessing it.
       #
-      # 2048 was too small for agentic clients. Such a client issues several
-      # calls per user turn (the main turn plus auxiliary ones for titles and
-      # context compaction), each with a different large prefix. A 40-53k token
-      # conversation caches at ~1.8 GB, so only one entry fits in 2048 and the
-      # calls evict each other in ping-pong -- the server logs "making room for
-      # prompt cache entry, removing oldest entry" and every call reports
-      # cache_n = 0, paying a 15-60s prefill each time.
+      # DO NOT RAISE THIS WITHOUT LOWERING mem_limit FIRST. It was briefly set
+      # to 8192 and the WSL2 VM wedged unrecoverably under normal use: `wsl`
+      # returned "Error catastrofico / Wsl/Service/E_UNEXPECTED" on the Windows
+      # side and only `wsl --shutdown` recovered it.
       #
-      # 8192 holds roughly four such entries. Measured on this host: 24 GB total
-      # with the container at ~9.3 GB of a 23.5 GB limit, so the extra 6 GB fits
-      # without pushing the box toward the WSL2 ceiling. Do not raise this to
-      # 12288 here: available RAM would drop to ~3.6 GB, and this host has a
-      # history of wedging unrecoverably under memory pressure.
+      # The arithmetic that was missed: mem_limit above is 24g and the whole
+      # WSL2 VM has ~24 GB, so the container's ceiling is the entire VM. The
+      # model is held in RAM by --load-mode mlock, and the prompt cache grows on
+      # top of it, so a large --cache-ram lets the container starve the VM that
+      # hosts it. Docker never kills the container because it never crosses its
+      # own limit -- the VM dies first, and it cannot be restarted remotely.
+      #
+      # 4096 is a deliberate middle ground: double the 2048 this host ran on for
+      # a long time without incident, but far from the 8192 that killed it.
+      # Raising it is a real speed win for long agentic conversations (prefill
+      # dropped from ~115s to ~0.3s on repeated 105k-token prefixes), but going
+      # higher is only safe once mem_limit sits comfortably below the VM's RAM,
+      # so that a runaway container is killed instead of the VM.
       - "--cache-ram"
-      - "8192"
+      - "4096"
 
       # --- Performance & Speed Optimization ---
       # Load the entire model directly into locked RAM/VRAM instead of mmap-ing it.
