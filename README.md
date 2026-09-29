@@ -34,10 +34,11 @@ cp .env.cpu.sample .env
 ```
 The script will detect if the model exists in `docker/data/models/`. If not, it will download it automatically before starting the container.
 
-### 4. Run Claude Code
+### 4. Run OpenCode
 ```bash
-./scripts/clients/claude-llama.sh
+./scripts/clients/opencode-llama.sh
 ```
+Use `opencode-llama-yolo.sh` to skip permission prompts.
 
 ---
 
@@ -48,11 +49,12 @@ Based on the [official llama-server documentation](https://github.com/ggml-org/l
 ### Main Capabilities
 - **Compatibility**: Native support for Anthropic (Messages API) and OpenAI (Chat/Completions).
 - **Performance**: Continuous batching and parallel decoding.
-- **Tool Use**: Support for function calling required by agents like Claude Code.
+- **Tool Use**: Support for function calling required by agentic clients.
 
 ### Available Endpoints (Port 12345 by default)
-- `POST /v1/messages`: Anthropic-compatible endpoint (used by Claude Code).
-- `POST /v1/chat/completions`: OpenAI-compatible endpoint.
+- `POST /v1/chat/completions`: OpenAI-compatible endpoint. **This is the one to use.**
+- `POST /v1/messages`: Anthropic-compatible endpoint. Unusable for agentic work:
+  it loses conversation history once tool results accumulate (see AGENTS.md).
 - `GET /health`: Server and model status.
 
 ### Key Configuration Flags

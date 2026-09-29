@@ -158,6 +158,8 @@ Clients must therefore target `/v1/chat/completions`. `opencode-llama.sh` uses
 the `@ai-sdk/openai-compatible` provider for this reason; do not switch it back
 to `@ai-sdk/anthropic`.
 
-Claude Code has no such option: it speaks the Anthropic API by design, so
-`claude-llama.sh` is exposed to this bug on long agentic runs. Prefer OpenCode
-for multi-step agentic work against this server until llama.cpp fixes it.
+Claude Code has no such option: it speaks the Anthropic API by design and is
+therefore permanently exposed to this bug. Its launcher was removed from this
+repo rather than left in place as a trap. Recover it with
+`git show f224847:scripts/clients/claude-llama.sh` if llama.cpp ever fixes the
+endpoint.
