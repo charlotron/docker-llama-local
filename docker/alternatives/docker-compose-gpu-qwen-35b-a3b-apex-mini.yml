@@ -13,7 +13,7 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
     
     # Custom name for the running container
-    container_name: llama-cpp-gpu
+    container_name: llama-cpp-gpu-qwen3.6-35b-a3b-apex-mini
     
     # Restrict container memory usage to protect host system stability (recommended for large models)
     mem_limit: 24g
@@ -166,7 +166,7 @@ services:
       - "--no-warmup"
       # Enable Multi-Token Prediction (MTP) speculative decoding: the model's own MTP head
       # drafts ahead, verified against the full model each step. Requires a GGUF built with
-      # the MTP head (see HF_REPO/HF_FILE in .env.gpu.qwen-35b-a3b-mtp.sample) and a recent llama.cpp build.
+      # the MTP head (see HF_REPO/HF_FILE in this profile's .env sample) and a recent llama.cpp build.
       # Measured: +19% generation throughput (39.8 -> 42.0 tok/s) at equal output quality.
       # spec-draft-n-max 2 is the quantizer's own recommended value and matched our best
       # empirical result (3 and 4 were both slower and noisier). Note: the model card warns

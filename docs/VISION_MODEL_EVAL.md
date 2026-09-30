@@ -59,7 +59,7 @@ Source project location on the GPU host:
 
 **Practical implication for anyone reusing this profile**: keep the GGUF+mmproj on
 native Linux storage, never on a `/mnt/<drive>`-style WSL2 bind mount. This is now
-called out directly in the new compose file and `.env.gpu.vision-qwen25vl.sample`
+called out directly in the new compose file and `alternatives/.env.gpu.qwen2.5-vl-7b.sample`
 committed as part of this evaluation.
 
 ### Confirmed vision support
@@ -180,8 +180,8 @@ that only exists in the image, not the text layer. The one hallucination found
 spot-checked for spec-critical work, same evidence-based caveat as the other 4
 profiles' known limitations documented in `BENCHMARKS.md`.
 
-Shipped as `docker/docker-compose-gpu-vision-qwen25vl.yml` +
-`.env.gpu.vision-qwen25vl.sample`, following the same pattern as the other 4
+Shipped as `docker/alternatives/docker-compose-gpu-vision-qwen25vl.yml` +
+`alternatives/.env.gpu.qwen2.5-vl-7b.sample`, following the same pattern as the other 4
 profiles. Two fixes from the investigation above are baked into the new compose file:
 `--load-mode none` instead of the removed `--no-mmap`, and a `${MODELS_DIR}`-driven
 volume mount with an explicit warning against slow/virtualized filesystem paths.
@@ -200,8 +200,8 @@ All containers (`llama-image-analyzer-gpu`, `llama-cpp-gpu`) were stopped on the
 at the end of this evaluation, per this investigation's established power-saving
 practice. Nothing was committed or pushed — changes are left as uncommitted edits for
 review:
-- `docker/docker-compose-gpu-vision-qwen25vl.yml` (new)
-- `.env.gpu.vision-qwen25vl.sample` (new)
+- `docker/alternatives/docker-compose-gpu-vision-qwen25vl.yml` (new)
+- `alternatives/.env.gpu.qwen2.5-vl-7b.sample` (new)
 - `scripts/docker/stop-all-servers.sh` (added the new container name + compose-down
   block)
 - `docs/VISION_MODEL_EVAL.md` (this file, new)

@@ -55,33 +55,21 @@ print_header "STOPPING ALL LLAMA.CPP SERVERS"
 
 print_step "Stopping active Docker containers"
 
-# Stop active containers if running
-docker stop llama-cpp-gpu llama-cpp-gpu-qwen-27b-mtp llama-cpp-gpu-qwen-27b-uncensored llama-cpp-gpu-gpt-oss-20b llama-cpp-gpu-vision-qwen25vl llama-cpp > /dev/null 2>&1
+# Stop every running llama.cpp container, whatever its profile. Matching the
+# "llama-cpp" name prefix instead of listing names keeps this correct when a
+# profile's container_name changes.
+RUNNING=$(docker ps -q --filter "name=^llama-cpp")
+[ -n "$RUNNING" ] && docker stop $RUNNING > /dev/null 2>&1
 
-# Shut down with docker compose using active configurations
-if [ -f .env ] && [ -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu-qwen-35b-a3b-mtp.yml down > /dev/null 2>&1
-fi
-
-if [ -f .env ] && [ -f docker/docker-compose-gpu-qwen-27b-mtp.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu-qwen-27b-mtp.yml down > /dev/null 2>&1
-fi
-
-if [ -f .env ] && [ -f docker/docker-compose-gpu-qwen-27b-uncensored.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu-qwen-27b-uncensored.yml down > /dev/null 2>&1
-fi
-
-if [ -f .env ] && [ -f docker/docker-compose-gpu-gpt-oss-20b.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu-gpt-oss-20b.yml down > /dev/null 2>&1
-fi
-
-if [ -f .env ] && [ -f docker/docker-compose-gpu-vision-qwen25vl.yml ]; then
-    docker compose --env-file .env -f docker/docker-compose-gpu-vision-qwen25vl.yml down > /dev/null 2>&1
-fi
-
-if [ -f docker/docker-compose-cpu.yml ]; then
-    docker compose -f docker/docker-compose-cpu.yml down > /dev/null 2>&1
-fi
+# Bring every profile's compose project down, recommended and alternative
+# alike, so no stopped container is left holding the name for the next launch.
+# Globbing the directories keeps this in step with profiles added or moved.
+ENV_ARGS=()
+[ -f .env ] && ENV_ARGS=(--env-file .env)
+for COMPOSE in docker/*.yml docker/alternatives/*.yml; do
+    [ -f "$COMPOSE" ] || continue
+    docker compose "${ENV_ARGS[@]}" -f "$COMPOSE" down > /dev/null 2>&1
+done
 
 print_success "All server instances stopped"
 

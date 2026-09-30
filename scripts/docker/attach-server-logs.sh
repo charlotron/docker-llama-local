@@ -35,8 +35,8 @@ echo -e "Esperando contenedor activo... (Presiona Ctrl + C para salir)\n"
 trap "echo -e '\n${RED}Desconectado de los logs.${NC}'; exit 0" SIGINT SIGTERM
 
 while true; do
-    # Búsqueda por expresión regular amplia que coincida con llama-cpp o llama-cpp-gpu
-    ACTIVE_CONTAINER=$(docker ps --format "{{.Names}}" | grep -E "^llama-cpp(-gpu)?$" | head -n 1)
+    # Any running llama.cpp container, whatever its profile name
+    ACTIVE_CONTAINER=$(docker ps --format "{{.Names}}" | grep -E "^llama-cpp" | head -n 1)
 
     if [ -n "$ACTIVE_CONTAINER" ]; then
         echo -e "${GREEN}✓ Conectado a los logs en tiempo real de: ${ACTIVE_CONTAINER}${NC}\n"

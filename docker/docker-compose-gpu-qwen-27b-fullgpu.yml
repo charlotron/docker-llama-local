@@ -1,0 +1,138 @@
+# =================================================================
+# DOCKER COMPOSE CONFIGURATION - GPU (CUDA), QWEN3.8-27B DENSE, FULLY ON GPU
+# =================================================================
+# Dense 27B for agentic work where the 35B A3B MoE lacks judgement. Every
+# earlier 27B profile ran at 4-10 tok/s because part of the model spilled to
+# system RAM: a dense model reads ALL its weights for every token, so the
+# layers left on the CPU (~60-80 GB/s DDR5) set the pace, not the GPU
+# (~500 GB/s). Those profiles also reserved 196K-393K of context across 2-3
+# slots, and that KV cache is exactly what pushed the layers out.
+#
+# This profile inverts the priority: the whole model on the GPU first,
+# context second.
+#
+#   weights  UD-Q2_K_XL                   9.83 GB
+#   KV       100K ctx, q4_0              ~1.8 GB
+#   compute buffers                       ~0.6 GB
+#   desktop (Windows, always resident)   ~0.58 GB
+#   measured: 11.74 GB idle, 11.86 GB peak with a 93K-token prompt,
+#   out of 12.28 GB. Prefill 958 tok/s and generation 24.5 tok/s at 93K;
+#   40 tok/s generation on a short context.
+#
+# The ~420 MiB left is the same kind of margin the apex-mini profile runs
+# with. If a browser or a video call on the Windows desktop ever causes a
+# CUDA OOM, drop --ctx-size to 65536 first (idle 11.1 GB).
+#
+# The context is cheap because Qwen3.8-27B is hybrid: of its 64 layers only
+# 16 are full attention (4 KV heads x 256 dim); the other 48 are Gated
+# DeltaNet, whose state does not grow with the context.
+#
+# --gpu-layers all + --fit off make a misfit FAIL at load with a CUDA OOM
+# instead of --fit silently moving layers back to the CPU, which would bring
+# back the 4-10 tok/s this profile exists to avoid.
+#
+# MTP is off: this GGUF does carry the MTP tensors (blk.64.nextn, ~350 MB,
+# "unused tensor" at load), but there is no VRAM left to enable them.
+
+name: docker-llama-gpu
+
+services:
+  llama-cpp:
+    image: ghcr.io/ggml-org/llama.cpp:full-cuda
+
+    container_name: llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl
+
+    # Well below the ~23 GB WSL2 VM on purpose: the weights live on the GPU,
+    # so the container needs little RAM, and a runaway must kill the
+    # container, not the VM (a 24g limit equals the whole VM on gpu-host).
+    mem_limit: 16g
+
+    ports:
+      - "${LLAMA_PORT:-12345}:${LLAMA_PORT:-12345}"
+
+    volumes:
+      - ${MODELS_DIR:-./docker/data/models}:/models
+
+    command:
+      # --- Basic Server Setup ---
+      - "--server"
+      - "--model"
+      - "/models/${TARGET_MODEL_FILE:-Qwen3.8-27B-UD-Q2_K_XL.gguf}"
+      - "--alias"
+      - "llama-local"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "${LLAMA_PORT:-12345}"
+
+      # --- Prompt & Chat Templates ---
+      - "--jinja"
+      - "--chat-template-kwargs"
+      - '{"preserve_thinking": true, "default_system_prompt": "You are a helpful coding assistant. RESPOND ALWAYS IN SPANISH."}'
+
+      # --- VRAM: everything on the GPU, or fail ---
+      - "--gpu-layers"
+      - "all"
+      - "--fit"
+      - "off"
+
+      # --- Context & Attention Options ---
+      # One 100K slot (102400): the most that fits, see the header.
+      - "--parallel"
+      - "1"
+      - "--ctx-size"
+      - "102400"
+      - "--cache-type-k"
+      - "q4_0"
+      - "--cache-type-v"
+      - "q4_0"
+      - "--flash-attn"
+      - "on"
+      - "--predict"
+      - "32768"
+      # Every thinking token costs real time on a dense model, so cap the
+      # thinking channel well below --predict and below OpenCode's 32768
+      # output limit (see AGENTS.md: the budget must sit below the client cap).
+      - "--reasoning-budget"
+      - "8192"
+      - "--reasoning-budget-message"
+      - "Time is nearly up. Stop reasoning now and write the final answer using what you have concluded so far."
+      - "--cache-ram"
+      - "2048"
+
+      # --- Performance ---
+      - "--load-mode"
+      - "mlock"
+      - "--no-warmup"
+
+      # --- CPU Thread Tuning ---
+      - "--threads"
+      - "${LLAMA_CPU_THREADS:-14}"
+      - "--threads-batch"
+      - "${LLAMA_CPU_THREADS:-14}"
+
+      # --- Sampling ---
+      # Qwen3.8-27B model card, thinking mode. Not the Qwen3.6 preset (temp
+      # 0.6) the older 27B profiles copied.
+      - "--temp"
+      - "1.0"
+      - "--top-p"
+      - "0.95"
+      - "--top-k"
+      - "20"
+      - "--min-p"
+      - "0"
+      - "--presence-penalty"
+      - "0"
+      - "--repeat-penalty"
+      - "1.0"
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    restart: unless-stopped

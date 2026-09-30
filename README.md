@@ -20,21 +20,28 @@ This project runs local models on **llama.cpp** inside Docker and connects an ag
 ### 2. Configuration
 Choose your mode and create your `.env` file:
 
-**For NVIDIA GPU (Recommended):**
-```bash
-cp .env.gpu.qwen-35b-a3b-apex-mini.sample .env
-```
+Two recommended NVIDIA GPU profiles sit in the repo root; each sample's
+header explains when to use it.
 
-**For NVIDIA GPU with image and video input:**
+**Programming, long autonomous agent runs (most reliable):**
 ```bash
-cp .env.gpu.qwen-35b-a3b-apex-mini-vision.sample .env
+cp .env.gpu.qwen3.8-27b-fullgpu-best-coding.sample .env
 ```
-Same weights and same measured speed as the profile above, plus an 861 MB
-`mmproj` file that enables vision. See `docs/BENCHMARKS.md` for the numbers.
+Qwen3.8-27B dense, fully on a 12 GB GPU: ~40 tok/s, 100K context, no vision.
+
+**Assistants, interactive agents, image and video analysis (fastest):**
+```bash
+cp .env.gpu.qwen3.6-35b-a3b-apex-mini-best-assistant-with-vision.sample .env
+```
+Qwen3.6-35B-A3B MoE: ~86-97 tok/s, 128K context, vision. Less reliable on
+long unattended runs. See `docs/BENCHMARKS.md` for the numbers.
+
+Every other profile lives in `alternatives/` (compose files in
+`docker/alternatives/`).
 
 **For CPU only:**
 ```bash
-cp .env.cpu.sample .env
+cp alternatives/.env.cpu.qwopus3.5-9b.sample .env
 ```
 
 ### 3. Launch Server
@@ -81,12 +88,14 @@ This setup was originally inspired by the tutorial by **Ing. Kevin David**: [How
 ## 🔧 Troubleshooting & Maintenance
 
 - **View real-time logs**:
-  - GPU: `docker logs -f llama-cpp-gpu`
+  - GPU: `./scripts/docker/attach-server-logs.sh` (finds whichever profile
+    is running), or `docker logs -f <container_name>` from the profile's
+    compose file
   - CPU: `docker logs -f llama-cpp`
 - **Stop server**: 
   - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
-  - `docker compose -f docker/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml down`
-  - `docker compose -f docker/docker-compose-cpu.yml down`
+  - `docker compose -f docker/alternatives/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml down`
+  - `docker compose -f docker/alternatives/docker-compose-cpu.yml down`
 - **Deep Clean (Delete models and reset)**:
   ```bash
   rm -rf docker/data/models/*

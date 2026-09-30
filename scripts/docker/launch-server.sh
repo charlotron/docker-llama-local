@@ -91,7 +91,7 @@ LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
 # Determine container name and default models folder based on compose file.
 # The container name is read directly from the compose file's own
 # `container_name:` line rather than guessed, since GPU profiles other than
-# the 35B default use profile-specific names (e.g. llama-cpp-gpu-qwen-27b-mtp)
+# the 35B default use profile-specific names (e.g. llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl)
 # -- a hardcoded guess here previously caused the script to attach to the
 # wrong container name and falsely report "Container stopped unexpectedly"
 # even when the real container was running and healthy.
@@ -206,7 +206,7 @@ download_gguf() {
 download_gguf "$HF_REPO" "$HF_FILE" "$MODEL_PATH"
 
 # Optional second file: the mmproj (vision projector) needed by multimodal
-# profiles (e.g. .env.gpu.vision-qwen25vl.sample). Only fetched if HF_MMPROJ_FILE
+# profiles (e.g. alternatives/.env.gpu.qwen2.5-vl-7b.sample). Only fetched if HF_MMPROJ_FILE
 # is set -- text-only profiles leave it unset and this is skipped entirely.
 if [ -n "$HF_MMPROJ_FILE" ]; then
     MMPROJ_FILE_NAME=$(basename "$HF_MMPROJ_FILE")
@@ -221,8 +221,11 @@ fi
 print_header "DOCKER DEPLOYMENT"
 print_step "Restarting services"
 
-# Stop active containers first to avoid conflicts
-docker stop llama-cpp llama-cpp-gpu llama-cpp-gpu-qwen-27b-mtp llama-cpp-gpu-qwen-27b-uncensored llama-cpp-gpu-gpt-oss-20b llama-cpp-gpu-vision-qwen25vl > /dev/null 2>&1
+# Stop every running llama.cpp container first, whatever its profile: they all
+# bind the same port. Matching the "llama-cpp" name prefix instead of listing
+# names keeps this correct when a profile's container_name changes.
+RUNNING=$(docker ps -q --filter "name=^llama-cpp")
+[ -n "$RUNNING" ] && docker stop $RUNNING > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d
 

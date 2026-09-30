@@ -56,7 +56,7 @@ Sampling values are **Qwen's official preset for thinking mode**, not tuned here
 
 ### Default: `apex-mini`
 
-`docker/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml` — Qwen3.6-35B-A3B-APEX-MTP-I-Mini (13.6 GB)
+`docker/alternatives/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml` — Qwen3.6-35B-A3B-APEX-MTP-I-Mini (13.6 GB)
 
 | Metric | Result |
 |---|---|
@@ -113,6 +113,7 @@ that profile swaps the 35B MoE for a 7B dense model just to read images.
 | `apex-compact-2slot` | Two concurrent slots needed | −28% speed, −6.7 pts HumanEval+ |
 | `gpt-oss-20b` | Lightest option, most headroom | 84.6 tok/s; different family |
 | `vision-qwen25vl` | Image input without the 35B MoE | 7B dense; superseded by `apex-mini-vision` |
+| `qwen3.8-27b-fullgpu-best-coding` | Programming, long autonomous agent runs (finished alone 12/12 vs 8/12) | 40 tok/s (about half), no vision, 100K context instead of 128K |
 | `qwen-27b-uncensored` | Refusal-free output | **4.4 tok/s**, language drift mid-answer (IQ2_M) |
 | `cpu` | No GPU | — |
 
@@ -164,6 +165,31 @@ The decisive pattern: **MoE beats dense on this hardware, by an order of
 magnitude.** Every 35B A3B MoE variant runs at 66-97 tok/s; every dense model
 tried (27B, 24B Devstral) sits at 4-10 tok/s, because dense activates all
 parameters per token while A3B activates ~3B of 35B.
+
+**Correction (2026-09-29): the 27B was never compute-bound, it was spilling.**
+Every 27B row above ran with 2-3 slots and 131K-393K of total context, and
+that KV cache pushed layers out of VRAM onto DDR5. Qwen3.8-27B is hybrid (16
+of 64 layers are full attention), so its context is cheap once it is kept to
+one slot. `qwen3.8-27b-fullgpu-best-coding` (UD-Q2_K_XL 9.83 GB, 1 slot, KV q4_0,
+`--gpu-layers all --fit off`) loads at 11.1 GB with 64K and 11.74 GB with
+100K (peak 11.86 GB on a 93K-token prompt: prefill 958 tok/s, generation
+24.5 tok/s, needle found). The table below was measured at 64K:
+
+| | 27B fullgpu | APEX-I-Mini |
+|---|---|---|
+| Generation | **40.3 tok/s** (36.7 at 18.6K ctx) | 86.2 tok/s |
+| Prefill, 18.6K-token prompt | 1257 tok/s | — |
+| Real tasks, same harness (below) | **14/15** | 13/15 |
+| Wall clock for the 15 runs | 49 min | 28 min |
+
+The real-task numbers come from a rebuilt 5-task harness (the original was not
+kept), each hidden test validated against a reference solution first, so the
+13/15 here is not comparable with the 15/15 in section 3.2. All three
+failures are genuine logic bugs: 27B joined the decimal part with `,`; Mini
+failed the TTL boundary once and parsed `'1.234,50'` wrongly once. At n=15 the
+two models are statistically tied on isolated tasks. The 27B spends ~8.4K
+tokens per task because `--reasoning-budget 8192` cuts it off every time;
+Mini hits its own 16384 budget on the hardest tasks.
 
 ### 3.1 Throughput and the `--fit-target` lever
 
@@ -326,7 +352,7 @@ names.
 
 | Candidate | Reason |
 |---|---|
-| **Whole 27B dense family** | 10.1 tok/s at best vs 97.2. Within it, APEX does not beat Unsloth's quant (IQ4_XS 6.7692 vs APEX-Mini 6.9788 at equal size and speed) |
+| **Whole 27B dense family** (superseded, see `qwen3.8-27b-fullgpu-best-coding`) | 10.1 tok/s at best vs 97.2, measured with the KV cache pushing layers to the CPU. Within it, APEX does not beat Unsloth's quant (IQ4_XS 6.7692 vs APEX-Mini 6.9788 at equal size and speed) |
 | **An APEX-MTP 27B** | Impossible — MTP needs a trained MTP head, present only in A3B MoE models |
 | **Q4_K_XL (21.3 GB)** | Not operable here. Under perplexity it re-read weights every chunk (35+ min, zero chunks, container in D-state); as a server with `mlock` it made the host unreachable 40+ min. A `--memory 17g` cgroup makes it worse — a 17 GB limit around a 21.3 GB mmap forces constant page eviction |
 | **KV f16 / q8_0** | Cost without benefit (section 3.6) |

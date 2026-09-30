@@ -15,7 +15,7 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
     # Custom name for the running container
-    container_name: llama-cpp-gpu-vision-qwen25vl
+    container_name: llama-cpp-gpu-qwen2.5-vl-7b-q8
 
     # Restrict container memory usage to protect host system stability
     mem_limit: 16g

@@ -23,7 +23,7 @@ services:
   llama-cpp:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
-    container_name: llama-cpp-gpu-qwen-27b-uncensored
+    container_name: llama-cpp-gpu-qwen3.8-27b-uncensored-iq2-m
 
     # Restrict container memory usage to protect host system stability
     mem_limit: 24g

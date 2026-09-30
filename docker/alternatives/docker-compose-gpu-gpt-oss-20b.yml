@@ -24,7 +24,7 @@ services:
   llama-cpp:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
-    container_name: llama-cpp-gpu-gpt-oss-20b
+    container_name: llama-cpp-gpu-gpt-oss-20b-ud-q4-k-xl
 
     # Restrict container memory usage to protect host system stability
     mem_limit: 24g

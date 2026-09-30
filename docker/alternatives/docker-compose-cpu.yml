@@ -10,7 +10,7 @@ services:
     image: ghcr.io/ggml-org/llama.cpp:full
     
     # Custom name for the running container
-    container_name: llama-cpp
+    container_name: llama-cpp-qwopus3.5-9b-q4-k-m
     
     # Expose the configured llama-server port to the host machine
     ports:

@@ -5,6 +5,17 @@ Read this before running `scripts/docker/launch-server.sh` against a real host.
 
 ## Profile files: what's tracked vs. what's real
 
+The repo root holds only the two recommended profiles; everything else lives
+in `alternatives/` (env samples) and `docker/alternatives/` (compose files):
+
+- `.env.gpu.qwen3.8-27b-fullgpu-best-coding.sample` -- programming, long
+  autonomous agent runs. Slower, no vision.
+- `.env.gpu.qwen3.6-35b-a3b-apex-mini-best-assistant-with-vision.sample` --
+  assistants, interactive agents, image/video analysis. Fastest.
+
+Each sample's header says when to use it. Real files copied from any sample
+go in the repo root, next to `.env`; `COMPOSE_FILE` paths are relative to it.
+
 - **`.env.gpu.<profile>.sample`** (tracked in git): a template for one profile.
   Carries the model-specific settings (`COMPOSE_FILE`, `HF_REPO`, `HF_FILE`,
   `LLAMA_CONTEXT_SIZE`, ...) with `MODELS_DIR=""` left blank on purpose. **Never
@@ -34,12 +45,13 @@ you switch often).** Create a real, non-`.sample` file for each profile you
 use regularly, by copying the corresponding `.sample` and filling in your
 machine's `MODELS_DIR`/host/port/threads once:
 ```
-cp .env.gpu.qwen-35b-a3b-apex-mini.sample .env.gpu.qwen-35b-a3b-apex-mini
-# edit .env.gpu.qwen-35b-a3b-apex-mini: set MODELS_DIR to your real model directory
+cp .env.gpu.qwen3.8-27b-fullgpu-best-coding.sample .env.gpu.qwen3.8-27b-fullgpu-best-coding
+# edit .env.gpu.qwen3.8-27b-fullgpu-best-coding: set MODELS_DIR to your real model directory
+cp alternatives/.env.gpu.gpt-oss-20b.sample .env.gpu.gpt-oss-20b
 ```
 Then launch any profile directly, no editing required per switch:
 ```
-./scripts/docker/launch-server.sh .env.gpu.qwen-35b-a3b-apex-mini
+./scripts/docker/launch-server.sh .env.gpu.qwen3.8-27b-fullgpu-best-coding
 ./scripts/docker/launch-server.sh .env.gpu.gpt-oss-20b
 ```
 These per-profile real files are gitignored (`.env.*` except `*.sample` — see
