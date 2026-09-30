@@ -240,7 +240,9 @@ rm -f "$READY_FILE"
 
 docker logs -f "$CONTAINER_NAME" 2>&1 | while read -r line; do
     echo "$line"
-    if echo "$line" | grep -q "server is listening on"; then
+    # Older llama.cpp builds log "server is listening on", newer ones
+    # "llama_server: listening on"; accept both.
+    if echo "$line" | grep -qE "(server is|llama_server:) listening on"; then
         touch "$READY_FILE"
         pkill -P $$ docker 2>/dev/null
         break
@@ -270,7 +272,7 @@ done
 if [ $ELAPSED -ge $TIMEOUT ]; then
     kill $LOG_PID 2>/dev/null
     rm -f "$READY_FILE"
-    print_error "Timeout reached ($TIMEOUTs)."
+    print_error "Timeout reached (${TIMEOUT}s)."
     exit 1
 fi
 
