@@ -17,10 +17,10 @@
 # check performed (not the deeper code-quality shootout given to the main
 # candidates) -- treat output quality with more caution than the other profiles.
 
-name: docker-llama-gpu
+name: llama-cpp-gpu-qwen3-8-27b-uncensored-iq2-m
 
 services:
-  llama-cpp:
+  gpu-qwen3-8-27b-uncensored-iq2-m:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
     container_name: llama-cpp-gpu-qwen3.8-27b-uncensored-iq2-m

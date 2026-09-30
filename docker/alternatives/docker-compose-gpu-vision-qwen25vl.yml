@@ -7,10 +7,10 @@
 # are text-only -- confirmed via /props and the absence of an mmproj file.
 # See docs/VISION_MODEL_EVAL.md for the full evaluation (PDF-page analysis
 # test, head-to-head vs. the 35B A3B text champion, VRAM/timing numbers).
-name: docker-llama-gpu-vision-qwen25vl
+name: llama-cpp-gpu-qwen2-5-vl-7b-q8
 
 services:
-  llama-cpp:
+  gpu-qwen2-5-vl-7b-q8:
     # Use the official high-performance CUDA-enabled llama.cpp docker image
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 

@@ -34,13 +34,13 @@
 # MTP is off: this GGUF does carry the MTP tensors (blk.64.nextn, ~350 MB,
 # "unused tensor" at load), but there is no VRAM left to enable them.
 
-name: docker-llama-gpu
+name: llama-cpp-gpu-qwen3-8-27b-ud-q2-k-xl-code
 
 services:
-  llama-cpp:
+  gpu-qwen3-8-27b-ud-q2-k-xl-code:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
-    container_name: llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl
+    container_name: llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl-code
 
     # Well below the ~23 GB WSL2 VM on purpose: the weights live on the GPU,
     # so the container needs little RAM, and a runaway must kill the

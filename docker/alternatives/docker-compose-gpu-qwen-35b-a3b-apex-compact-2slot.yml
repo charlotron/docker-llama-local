@@ -1,11 +1,11 @@
 # =================================================================
 # DOCKER COMPOSE CONFIGURATION - GPU (CUDA) - Qwen3.6-35B-A3B APEX-MTP-I-Compact, 2 slots
 # =================================================================
-name: docker-llama-gpu
+name: llama-cpp-gpu-qwen3-6-35b-a3b-apex-compact
 
 services:
   # The main llama.cpp inference service
-  llama-cpp:
+  gpu-qwen3-6-35b-a3b-apex-compact:
     # Use the official high-performance CUDA-enabled llama.cpp docker image
     # Requires a build with real --spec-type draft-mtp support (build >= 10975).
     # Run `docker pull ghcr.io/ggml-org/llama.cpp:full-cuda` before first deploy to make

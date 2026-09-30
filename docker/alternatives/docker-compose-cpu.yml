@@ -1,11 +1,11 @@
 # =================================================================
 # DOCKER COMPOSE CONFIGURATION - CPU COMPATIBLE MODE
 # =================================================================
-name: docker-llama-cpu
+name: llama-cpp-qwopus3-5-9b-q4-k-m
 
 services:
   # The main llama.cpp inference service (running on CPU)
-  llama-cpp:
+  qwopus3-5-9b-q4-k-m:
     # Use the official standard llama.cpp docker image compiled for CPU inference
     image: ghcr.io/ggml-org/llama.cpp:full
     

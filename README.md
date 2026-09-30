@@ -36,6 +36,12 @@ cp .env.gpu.qwen3.6-35b-a3b-apex-mini-best-assistant-with-vision.sample .env
 Qwen3.6-35B-A3B MoE: ~86-97 tok/s, 128K context, vision. Less reliable on
 long unattended runs. See `docs/BENCHMARKS.md` for the numbers.
 
+Each profile has its own Compose project, service and container name, all
+derived from the model (the coding profile ends in `-code`, the vision one in
+`-fast-vision`), so both recommended profiles can be created side by side.
+Only one can run at a time on a 12 GB GPU: `launch-server.sh` stops every
+`llama-cpp*` container before starting the chosen one.
+
 Every other profile lives in `alternatives/` (compose files in
 `docker/alternatives/`).
 
@@ -91,7 +97,7 @@ This setup was originally inspired by the tutorial by **Ing. Kevin David**: [How
   - GPU: `./scripts/docker/attach-server-logs.sh` (finds whichever profile
     is running), or `docker logs -f <container_name>` from the profile's
     compose file
-  - CPU: `docker logs -f llama-cpp`
+  - CPU: `docker logs -f llama-cpp-qwopus3.5-9b-q4-k-m`
 - **Stop server**: 
   - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
   - `docker compose -f docker/alternatives/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml down`

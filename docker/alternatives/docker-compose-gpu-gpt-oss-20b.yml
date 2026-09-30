@@ -18,10 +18,10 @@
 # that for your agentic use case before treating this as equivalent to the
 # Qwen profiles for tool-heavy workflows.
 
-name: docker-llama-gpu
+name: llama-cpp-gpu-gpt-oss-20b-ud-q4-k-xl
 
 services:
-  llama-cpp:
+  gpu-gpt-oss-20b-ud-q4-k-xl:
     image: ghcr.io/ggml-org/llama.cpp:full-cuda
 
     container_name: llama-cpp-gpu-gpt-oss-20b-ud-q4-k-xl

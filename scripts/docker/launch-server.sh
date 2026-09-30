@@ -91,7 +91,7 @@ LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
 # Determine container name and default models folder based on compose file.
 # The container name is read directly from the compose file's own
 # `container_name:` line rather than guessed, since GPU profiles other than
-# the 35B default use profile-specific names (e.g. llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl)
+# the 35B default use profile-specific names (e.g. llama-cpp-gpu-qwen3.8-27b-ud-q2-k-xl-code)
 # -- a hardcoded guess here previously caused the script to attach to the
 # wrong container name and falsely report "Container stopped unexpectedly"
 # even when the real container was running and healthy.
