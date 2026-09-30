@@ -75,15 +75,6 @@ export LLAMA_HOST=${LLAMA_HOST:-127.0.0.1}
 export LLAMA_PORT=${LLAMA_PORT:-12345}
 export MODEL="llama-local/llama-local"
 
-# Define the maximum tokens to generate per single response (output limit)
-export LLAMA_OUTPUT_LIMIT=32768
-
-# Dynamically calculate the compaction buffer (output limit + 1000 tokens)
-export LLAMA_COMPACT_BUFFER=$((LLAMA_OUTPUT_LIMIT + 1000))
-
-# Dynamically calculate the keep tokens window size (double the output limit)
-export LLAMA_COMPACT_KEEP=$((LLAMA_OUTPUT_LIMIT * 2))
-
 print_header "RESOLVING LLAMA.CPP CONFIGURATION"
 printf "  ${CYAN}- Querying Llama.cpp slots API on http://$LLAMA_HOST:$LLAMA_PORT...${NC}\r"
 
@@ -97,6 +88,25 @@ else
     export LLAMA_CONTEXT_SIZE=${LLAMA_CONTEXT_SIZE:-131072}
     printf "  ${YELLOW}! Server slots API unreachable. Falling back to configured context size: ${BOLD}${LLAMA_CONTEXT_SIZE} tokens${NC}\n"
 fi
+
+# Output limit and compaction windows derive from the real context size. Fixed
+# values only fit a 128K slot: with a smaller one (the 27B profile runs 100K)
+# a 32768 output cap plus a 65536 "keep" window leave almost no room for the
+# conversation itself. At 131072 these give the same 32768 / 33768 / 65536 as
+# before.
+# Maximum tokens to generate per single response: a quarter of the context,
+# capped at 32768.
+LLAMA_OUTPUT_LIMIT=$((LLAMA_CONTEXT_SIZE / 4))
+(( LLAMA_OUTPUT_LIMIT > 32768 )) && LLAMA_OUTPUT_LIMIT=32768
+export LLAMA_OUTPUT_LIMIT
+
+# Compaction buffer: output limit + 1000 tokens
+export LLAMA_COMPACT_BUFFER=$((LLAMA_OUTPUT_LIMIT + 1000))
+
+# Tokens kept after compaction: double the output limit, at most half the context
+LLAMA_COMPACT_KEEP=$((LLAMA_OUTPUT_LIMIT * 2))
+(( LLAMA_COMPACT_KEEP > LLAMA_CONTEXT_SIZE / 2 )) && LLAMA_COMPACT_KEEP=$((LLAMA_CONTEXT_SIZE / 2))
+export LLAMA_COMPACT_KEEP
 
 # Define the temporary path for opencode.json dynamically using system temporary path
 export OPENCODE_CONFIG="${TMPDIR:-/tmp}/opencode.json"
