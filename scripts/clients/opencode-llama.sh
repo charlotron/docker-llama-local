@@ -89,14 +89,11 @@ else
     printf "  ${YELLOW}! Server slots API unreachable. Falling back to configured context size: ${BOLD}${LLAMA_CONTEXT_SIZE} tokens${NC}\n"
 fi
 
-# Output limit and compaction windows derive from the real context size. Fixed
-# values only fit a 128K slot: with a smaller one (the 27B profile runs 100K)
-# a 32768 output cap plus a 65536 "keep" window leave almost no room for the
-# conversation itself. At 131072 these give the same 32768 / 33768 / 65536 as
-# before.
-# Maximum tokens to generate per single response: a quarter of the context,
-# capped at 32768.
-LLAMA_OUTPUT_LIMIT=$((LLAMA_CONTEXT_SIZE / 4))
+# Output limit and compaction windows derive from the real context size.
+# Maximum tokens to generate per single response: a third of the context,
+# capped at 32768, so 100K and larger contexts get the full 32768 and the
+# compaction buffer below always holds a whole response.
+LLAMA_OUTPUT_LIMIT=$((LLAMA_CONTEXT_SIZE / 3))
 (( LLAMA_OUTPUT_LIMIT > 32768 )) && LLAMA_OUTPUT_LIMIT=32768
 export LLAMA_OUTPUT_LIMIT
 
