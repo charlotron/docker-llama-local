@@ -62,6 +62,20 @@ The script will detect if the model exists in `docker/data/models/`. If not, it 
 ```
 Use `opencode-llama-yolo.sh` to skip permission prompts.
 
+The script reads the context size from the server's `/slots` (falling back to
+`LLAMA_CONTEXT_SIZE`) and derives OpenCode's limits from it:
+
+| Setting | Rule | At 100K (102400) |
+| --- | --- | ---: |
+| Output limit per response | a third of the context, at most 32768 | 32768 |
+| Compaction buffer | output limit + 1000 | 33768 (compacts at ~68.6K) |
+| Kept verbatim after compaction | a fifth of the context | 20480 |
+
+The buffer must hold a whole response, or a request can go past the context
+before OpenCode compacts. A larger "keep" leaves the session right under the
+threshold after compacting, and subagents then compact again every couple of
+tool calls.
+
 ---
 
 ## 🛠️ Technical Specifications (llama-server)
