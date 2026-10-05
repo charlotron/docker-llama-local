@@ -100,10 +100,9 @@ export LLAMA_OUTPUT_LIMIT
 # Compaction buffer: output limit + 1000 tokens
 export LLAMA_COMPACT_BUFFER=$((LLAMA_OUTPUT_LIMIT + 1000))
 
-# Tokens kept after compaction: double the output limit, at most half the context
-LLAMA_COMPACT_KEEP=$((LLAMA_OUTPUT_LIMIT * 2))
-(( LLAMA_COMPACT_KEEP > LLAMA_CONTEXT_SIZE / 2 )) && LLAMA_COMPACT_KEEP=$((LLAMA_CONTEXT_SIZE / 2))
-export LLAMA_COMPACT_KEEP
+# Tokens kept verbatim after compaction: a fifth of the context. More leaves the
+# session right under the threshold, so it compacts again a turn or two later.
+export LLAMA_COMPACT_KEEP=$((LLAMA_CONTEXT_SIZE / 5))
 
 # Define the temporary path for opencode.json dynamically using system temporary path
 export OPENCODE_CONFIG="${TMPDIR:-/tmp}/opencode.json"
