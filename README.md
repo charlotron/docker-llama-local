@@ -107,15 +107,12 @@ This setup was originally inspired by the tutorial by **Ing. Kevin David**: [How
 
 ## 🔧 Troubleshooting & Maintenance
 
-- **View real-time logs**:
-  - GPU: `./scripts/docker/attach-server-logs.sh` (finds whichever profile
-    is running), or `docker logs -f <container_name>` from the profile's
-    compose file
-  - CPU: `docker logs -f llama-cpp-qwopus3.5-9b-q4-k-m`
-- **Stop server**: 
-  - The script `./scripts/docker/launch-server.sh` handles this automatically, but you can also use:
-  - `docker compose -f docker/alternatives/docker-compose-gpu-qwen-35b-a3b-apex-mini.yml down`
-  - `docker compose -f docker/alternatives/docker-compose-cpu.yml down`
+- **View real-time logs**: `./scripts/docker/attach-server-logs.sh` attaches
+  to whichever profile is running, GPU or CPU (any `llama-cpp*` container), and
+  reattaches after a restart. `docker logs -f <container_name>` also works; the
+  name is in the profile's compose file.
+- **Stop server**: `./scripts/docker/stop-all-servers.sh` stops every profile,
+  GPU or CPU. `launch-server.sh` already does this before starting another one.
 - **Deep Clean (Delete models and reset)**:
   ```bash
   rm -rf docker/data/models/*
