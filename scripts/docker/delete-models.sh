@@ -12,7 +12,7 @@ print_header() {
     echo -e "\n# --- $1 ---"
 }
 
-# --- Cargar directorio desde .env o usar valor por defecto ---
+# --- Models directory from .env, or the default ---
 # --- Dependency checks ---
 # Fail here, naming what is missing and how to get it, rather than letting the
 # command fail later with "command not found" -- which says nothing about what

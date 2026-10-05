@@ -224,7 +224,7 @@ print_step "Restarting services"
 # Stop every running llama.cpp container first, whatever its profile: they all
 # bind the same port. Matching the "llama-cpp" name prefix instead of listing
 # names keeps this correct when a profile's container_name changes.
-RUNNING=$(docker ps -q --filter "name=^llama-cpp")
+RUNNING=$(docker ps -q --filter "name=^llama-cpp"; docker ps -q --filter "name=^strata")
 [ -n "$RUNNING" ] && docker stop $RUNNING > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" down > /dev/null 2>&1
 docker compose --env-file "$ENV_FILE" -f "${COMPOSE_FILE}" up -d

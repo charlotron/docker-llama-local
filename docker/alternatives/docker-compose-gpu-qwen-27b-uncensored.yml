@@ -56,7 +56,7 @@ services:
       - "1536"
 
       # --- Context & Attention Options ---
-      # Same 393216 / 3 = 131072 (128K) per-slot split as the other GPU profiles.
+      # Split over the 2 slots below: 196608 (192K) per slot.
       - "--ctx-size"
       - "393216"
       # Raised from 32768 per Qwen's own guidance (up to 81920 for complex coding/

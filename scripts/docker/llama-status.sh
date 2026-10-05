@@ -124,7 +124,7 @@ while true; do
     echo -e "${MAGENTA}${BOLD}===================================================================${NC}\033[K"
     echo -e "${MAGENTA}${BOLD}           LLAMA.CPP SYSTEM & SLOT MONITOR (http://$HOST:$PORT) ${NC}\033[K"
     echo -e "${MAGENTA}${BOLD}===================================================================${NC}\033[K"
-    echo -e "${YELLOW}Refrescando cada 10s - Presiona Ctrl+C para salir${NC}\033[K\n"
+    echo -e "${YELLOW}Refreshing every 10 s - Ctrl+C to exit${NC}\033[K\n"
     
     print_system_metrics
     

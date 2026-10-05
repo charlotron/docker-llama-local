@@ -13,9 +13,18 @@ This project runs local models on **llama.cpp** inside Docker and connects an ag
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
-- Linux with Docker and Docker Compose installed.
-- **For GPU mode**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) installed and configured.
-- OpenCode installed (`npm install -g opencode-ai`).
+- **Docker with Docker Compose is required**: everything runs in containers.
+  Docker Engine on Linux, or Docker Desktop (WSL2 backend on Windows); an
+  equivalent runtime that supports `docker compose` and GPU passthrough also
+  works.
+- **An NVIDIA GPU with 12 GB of VRAM or more is strongly recommended.** Every
+  profile except the CPU one is sized for a 12 GB card; the CPU profile runs a
+  small 9B model and is much slower.
+- **For GPU mode**: an NVIDIA driver plus the
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+  on Linux (Docker Desktop on WSL2 provides GPU access itself).
+- OpenCode (`npm install -g opencode-ai`), plus `curl`, `jq` and `node` for
+  the client script.
 
 ### 2. Configuration
 Choose your mode and create your `.env` file:
@@ -54,7 +63,9 @@ cp alternatives/.env.cpu.qwopus3.5-9b.sample .env
 ```bash
 ./scripts/docker/launch-server.sh
 ```
-The script will detect if the model exists in `docker/data/models/`. If not, it will download it automatically before starting the container.
+The script checks whether the model is already in `MODELS_DIR` (default
+`docker/data/models/`) and downloads it from Hugging Face if not, before
+starting the container.
 
 ### 4. Run OpenCode
 ```bash
@@ -108,7 +119,6 @@ Based on the [official llama-server documentation](https://github.com/ggml-org/l
   name is in the profile's compose file.
 - **Stop server**: `./scripts/docker/stop-all-servers.sh` stops every profile,
   GPU or CPU. `launch-server.sh` already does this before starting another one.
-- **Deep Clean (Delete models and reset)**:
-  ```bash
-  rm -rf docker/data/models/*
-  ```
+- **Live status** (GPU, RAM, container): `./scripts/docker/llama-status.sh`
+- **Delete downloaded models**: `./scripts/docker/delete-models.sh` (uses
+  `MODELS_DIR` from `.env`).

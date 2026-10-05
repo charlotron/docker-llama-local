@@ -77,7 +77,8 @@ paths (see Known gotchas below).
   always set a real `MODELS_DIR` in your own `.env*` rather than relying on
   the blank default.
 - **`--load-mode mlock` hangs indefinitely on a slow/virtualized filesystem.**
-  All GPU compose files use `--load-mode mlock` so the whole model is pinned
+  The GPU compose files use `--load-mode mlock` (all but the Qwen2.5-VL one,
+  which uses `none`) so the whole model is pinned
   in RAM at load time (no lazy paging) — this requires `MODELS_DIR` to point
   at native, fast local disk (e.g. `/home/<user>/data/llama-models`). If it
   ever points at a WSL2 `/mnt/<drive>` 9p bind mount (or any slow

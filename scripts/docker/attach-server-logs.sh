@@ -29,24 +29,24 @@ require_docker() {
 require_docker
 
 echo -e "\n${CYAN}# --- LLAMA.CPP AUTO-ATTACH LOGS ---${NC}"
-echo -e "Esperando contenedor activo... (Presiona Ctrl + C para salir)\n"
+echo -e "Waiting for a running container... (Ctrl + C to exit)\n"
 
-# Trampa para salir limpiamente con Ctrl + C
-trap "echo -e '\n${RED}Desconectado de los logs.${NC}'; exit 0" SIGINT SIGTERM
+# Exit cleanly on Ctrl + C
+trap "echo -e '\n${RED}Detached from the logs.${NC}'; exit 0" SIGINT SIGTERM
 
 while true; do
     # Any running llama.cpp container, whatever its profile name
     ACTIVE_CONTAINER=$(docker ps --format "{{.Names}}" | grep -E "^llama-cpp" | head -n 1)
 
     if [ -n "$ACTIVE_CONTAINER" ]; then
-        echo -e "${GREEN}✓ Conectado a los logs en tiempo real de: ${ACTIVE_CONTAINER}${NC}\n"
+        echo -e "${GREEN}✓ Attached to the live logs of: ${ACTIVE_CONTAINER}${NC}\n"
         
-        # Conecta a los logs de forma interactiva
+        # Follow the logs
         docker logs -f --tail 100 "$ACTIVE_CONTAINER"
         
-        echo -e "\n${YELLOW}! Se ha perdido la conexión con ${ACTIVE_CONTAINER}. Reintentando...${NC}"
+        echo -e "\n${YELLOW}! Lost the connection to ${ACTIVE_CONTAINER}. Retrying...${NC}"
     else
-        printf "\r${YELLOW}⌛ Buscando servidor llama.cpp activo...${NC}   "
+        printf "\r${YELLOW}⌛ Looking for a running llama.cpp server...${NC}   "
     fi
 
     sleep 2
