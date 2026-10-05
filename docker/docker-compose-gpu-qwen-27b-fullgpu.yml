@@ -44,7 +44,7 @@ services:
 
     # Well below the ~23 GB WSL2 VM on purpose: the weights live on the GPU,
     # so the container needs little RAM, and a runaway must kill the
-    # container, not the VM (a 24g limit equals the whole VM on gpu-host).
+    # container, not the VM (a 24g limit equals the whole VM).
     mem_limit: 16g
 
     ports:
