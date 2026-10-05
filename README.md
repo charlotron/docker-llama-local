@@ -100,11 +100,6 @@ Based on the [official llama-server documentation](https://github.com/ggml-org/l
 - `--jinja`: **Critical**. Enables the template engine for correct "Tool Use" handling.
 - `--reasoning on`: Enables enhanced reasoning capabilities.
 
-## 📺 Credits
-This setup was originally inspired by the tutorial by **Ing. Kevin David**: [How to configure Claude Code with llama.cpp](https://www.youtube.com/watch?v=Ym967X2VCKY).
-
----
-
 ## 🔧 Troubleshooting & Maintenance
 
 - **View real-time logs**: `./scripts/docker/attach-server-logs.sh` attaches
