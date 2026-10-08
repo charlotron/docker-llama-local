@@ -12,7 +12,7 @@
 # context second.
 #
 #   weights  UD-Q2_K_XL                   9.83 GB
-#   KV       100K ctx, q4_0              ~1.8 GB
+#   KV       96K ctx, q4_0              ~1.7 GB
 #   compute buffers                       ~0.6 GB
 #   desktop (Windows, always resident)   ~0.58 GB
 #   measured: 11.74 GB idle, 11.86 GB peak with a 93K-token prompt,
@@ -77,11 +77,11 @@ services:
       - "off"
 
       # --- Context & Attention Options ---
-      # One 100K slot (102400): the most that fits, see the header.
+      # One 96K slot (98304): the most that stays fast, see the header.
       - "--parallel"
       - "1"
       - "--ctx-size"
-      - "102400"
+      - "98304"
       - "--cache-type-k"
       - "q4_0"
       - "--cache-type-v"

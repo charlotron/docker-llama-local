@@ -113,7 +113,7 @@ that profile swaps the 35B MoE for a 7B dense model just to read images.
 | `apex-compact-2slot` | Two concurrent slots needed | −28% speed, −6.7 pts HumanEval+ |
 | `gpt-oss-20b` | Lightest option, most headroom | 84.6 tok/s; different family |
 | `vision-qwen25vl` | Image input without the 35B MoE | 7B dense; superseded by `apex-mini-vision` |
-| `qwen3.8-27b-fullgpu-best-coding` | Programming, long autonomous agent runs (finished alone 12/12 vs 8/12) | 40 tok/s (about half), no vision, 100K context instead of 128K |
+| `qwen3.8-27b-fullgpu-best-coding` | Programming, long autonomous agent runs (finished alone 12/12 vs 8/12) | 40 tok/s (about half), no vision, 96K context instead of 128K |
 | `qwen-27b-uncensored` | Refusal-free output | **4.4 tok/s**, language drift mid-answer (IQ2_M) |
 | `cpu` | No GPU | — |
 

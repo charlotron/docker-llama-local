@@ -36,7 +36,7 @@ header explains when to use it.
 ```bash
 cp .env.gpu.qwen3.8-27b-fullgpu-best-coding.sample .env
 ```
-Qwen3.8-27B dense, fully on a 12 GB GPU: ~40 tok/s, 100K context, no vision.
+Qwen3.8-27B dense, fully on a 12 GB GPU: ~40 tok/s, 96K context, no vision.
 
 **Assistants, interactive agents, image and video analysis (fastest):**
 ```bash
@@ -76,11 +76,11 @@ Use `opencode-llama-yolo.sh` to skip permission prompts.
 The script reads the context size from the server's `/slots` (falling back to
 `LLAMA_CONTEXT_SIZE`) and derives OpenCode's limits from it:
 
-| Setting | Rule | At 100K (102400) |
+| Setting | Rule | At 96K (98304) |
 | --- | --- | ---: |
 | Output limit per response | a third of the context, at most 32768 | 32768 |
-| Compaction buffer | output limit + 1000 | 33768 (compacts at ~68.6K) |
-| Kept verbatim after compaction | a fifth of the context | 20480 |
+| Compaction buffer | output limit + 1000 | 33768 (compacts at ~64.5K) |
+| Kept verbatim after compaction | a fifth of the context | 19660 |
 
 The buffer must hold a whole response, or a request can go past the context
 before OpenCode compacts. A larger "keep" leaves the session right under the
