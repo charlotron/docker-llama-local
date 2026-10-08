@@ -93,6 +93,11 @@ services:
       # Every thinking token costs real time on a dense model, so cap the
       # thinking channel well below --predict and below OpenCode's 32768
       # output limit (see AGENTS.md: the budget must sit below the client cap).
+      # Reasoning effort "medium" instead of the template default "xhigh": on the
+      # coding harness it halved the tokens per task (50.6K -> 17.5K over 8
+      # tasks) at the same pass rate, see docs/BENCHMARKS.md section 3.7.
+      - "--reasoning-effort"
+      - "medium"
       - "--reasoning-budget"
       - "8192"
       - "--reasoning-budget-message"

@@ -347,6 +347,24 @@ has seen Q2_K_XL behave more reliably in day-to-day use. Our runs did not
 separate the two on quality, so this choice rests on that experience, not on a
 measured difference. Revisit with the coding-task harness if that changes.
 
+### 3.8 Reasoning effort: `xhigh` (template default) vs `medium`
+
+Coding harness, 4 tasks x 2 samples, Python with unit tests (parse EUR amounts,
+LRU cache with TTL, interval merge, slugify). Same server and sampling as
+production (Q2_K_XL, 98304, thinking budget 8192). The only change is
+`--reasoning-effort`.
+
+| Effort | Passed | Completion tokens | Wall time | Aggregate tok/s | Cut by budget |
+|---|---|---|---|---|---|
+| default (`xhigh`) | 8/8 | 50,637 | 1,524 s | 33.2 | 0 |
+| `medium` | 8/8 | 17,465 | 518 s | 33.7 | 0 |
+
+`medium` used 65% fewer tokens and finished in a third of the time, with the same
+pass rate. Speed per token is unchanged, so the gain is all in how much the
+model thinks. Limits: 8 samples, tests written for this harness, pass/fail only.
+It does not show quality differences on harder tasks. Production uses `medium`;
+revisit if a harder task set shows a drop.
+
 Recall check: a single code inserted at 10% of the ~91K prompt was returned
 correctly in the visible answer by IQ2_S with both KV settings. One case per
 setting is not a recall rate.
