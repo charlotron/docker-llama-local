@@ -329,15 +329,23 @@ What the numbers say:
 
 - **No row reaches 25 tok/s with the context full.** Generation loses ~35-40%
   between an empty and a ~91K context on every quant tested.
-- **IQ2_S frees ~1.1 GB of VRAM** versus Q2_K_XL at the same context, and is a
-  few percent faster. The gain is headroom, not speed.
+- **IQ2_S frees ~1.1 GB of VRAM** versus Q2_K_XL at the same context, and is
+  ~8% faster with an empty context. The gain is headroom, not speed. IQ2_S is a
+  viable option; production keeps Q2_K_XL (see the decision below).
 - **Quantizing K to q8_0 costs more speed than it is worth here** (-34% at full
   context, +0.8 GB of VRAM). Keep `q4_0` for both K and V.
 - **Q2_K_XL at 100K (102400) collapses** to ~2-3 tok/s: VRAM reaches 11.9 GB of
-  12.28 GB and layers spill to system RAM. 98K (98304) does not spill (11.74 GB).
+  12.28 GB; the slowdown looks like layers spilling to system RAM (not verified).
+  98K (98304) does not show it (11.74 GB).
   IQ2_S at 131K still fits in 11.42 GB, so its spill risk is lower.
-- **Coherence beyond 100K** was observed in use and is not measured here. The
-  production context stays at 98304 (96K) for that reason.
+- **Coherence beyond 100K** was reported by the maintainer in use; it is not
+  measured here. The production context stays at 98304 (96K) for that reason.
+
+**Decision (2026-10-08):** production stays on UD-Q2_K_XL at 98304. IQ2_S is
+viable (lower VRAM, similar speed, passes the recall check), but the maintainer
+has seen Q2_K_XL behave more reliably in day-to-day use. Our runs did not
+separate the two on quality, so this choice rests on that experience, not on a
+measured difference. Revisit with the coding-task harness if that changes.
 
 Recall check: a single code inserted at 10% of the ~91K prompt was returned
 correctly in the visible answer by IQ2_S with both KV settings. One case per
