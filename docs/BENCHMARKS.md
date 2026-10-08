@@ -303,6 +303,48 @@ visible answer under a 400-token cap — see section 4.
 
 ---
 
+### 3.7 27B quantization and context ceiling (reference host, 2026-10-08)
+
+Host: RTX 4070 SUPER 12 GB (12282 MiB), WSL2 28 GB. One slot, `--gpu-layers all
+--fit off --flash-attn on`, KV cache `q4_0`, server on `--ctx-size 98304`.
+Same server flags for every row. Thinking was **unbounded** in these runs (no
+`--reasoning-budget`), unlike the production profile.
+
+Method: "empty" is a 400-token generation on a short prompt. "Full" is a
+~91.5K-token prompt followed by a 300-token generation, so it measures generation
+speed with the context nearly full. Both numbers come from the server's own
+timing lines (`eval time`, `prompt eval time`).
+
+| Quant | File | VRAM at 98K | Empty gen | Full: prefill / gen | Notes |
+|---|---|---|---|---|---|
+| **UD-Q2_K_XL** (production) | 9.83 GB | 11.74 GB | 34.8 tok/s | 839 / **21.3** tok/s | Full at 65K: 23.9 tok/s |
+| UD-IQ2_S | 8.37 GB | 10.68 GB | 37.7 tok/s | 820 / **22.7** tok/s | Needle recalled |
+| UD-IQ2_S, 131K ctx | 8.37 GB | 11.42 GB | 37.7 tok/s | 825 / 22.5 tok/s | Fits, not used (see limit below) |
+| UD-IQ2_S, K q8_0 / V q4_0 | 8.37 GB | 11.46 GB | 38.2 tok/s | 828 / 14.9 tok/s | Needle recalled; -34% at full context |
+
+Not measured: UD-IQ2_XXS (7.3 GB, download incomplete), UD-IQ3_XXS (10.9 GB;
+estimated ~12.8 GB at 98K, does not fit on this card).
+
+What the numbers say:
+
+- **No row reaches 25 tok/s with the context full.** Generation loses ~35-40%
+  between an empty and a ~91K context on every quant tested.
+- **IQ2_S frees ~1.1 GB of VRAM** versus Q2_K_XL at the same context, and is a
+  few percent faster. The gain is headroom, not speed.
+- **Quantizing K to q8_0 costs more speed than it is worth here** (-34% at full
+  context, +0.8 GB of VRAM). Keep `q4_0` for both K and V.
+- **Q2_K_XL at 100K (102400) collapses** to ~2-3 tok/s: VRAM reaches 11.9 GB of
+  12.28 GB and layers spill to system RAM. 98K (98304) does not spill (11.74 GB).
+  IQ2_S at 131K still fits in 11.42 GB, so its spill risk is lower.
+- **Coherence beyond 100K** was observed in use and is not measured here. The
+  production context stays at 98304 (96K) for that reason.
+
+Recall check: a single code inserted at 10% of the ~91K prompt was returned
+correctly in the visible answer by IQ2_S with both KV settings. One case per
+setting is not a recall rate.
+
+---
+
 ## 4. Production gotchas (these bite silently)
 
 ### `preserve_thinking` + a small `max_tokens` returns EMPTY content, not an error
